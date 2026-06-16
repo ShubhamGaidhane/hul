@@ -1,0 +1,1354 @@
+{
+  "catalog": {
+    "pipelines": [
+      {
+        "asset_type": "pipeline",
+        "factory": "bieno-da08-d-80011-adf-cd-05",
+        "pipeline": "PL_CD_D_SOCS_CA_ABLBTOADLS_DESPNOTEHEADER_LANDED",
+        "activity_count": 3,
+        "activity_kinds": [
+          "IfCondition",
+          "SqlServerStoredProcedure",
+          "Lookup"
+        ],
+        "activities_detail": [
+          {
+            "name": "AT_LKP_InsertBatchDetails",
+            "type": "Lookup",
+            "depends_on": [],
+            "config": {
+              "source": {
+                "type": "AzureSqlSource",
+                "sqlReaderStoredProcedureName": "[EtlLog].[uspBatchDetailStartLog]",
+                "storedProcedureParameters": {
+                  "JobName": {
+                    "type": "String",
+                    "value": {
+                      "value": "@pipeline().Pipeline",
+                      "type": "Expression"
+                    }
+                  },
+                  "ParentBatchID": {
+                    "type": "Int32",
+                    "value": {
+                      "value": "@pipeline().parameters.ParentBatchId",
+                      "type": "Expression"
+                    }
+                  },
+                  "RunID": {
+                    "type": "Guid",
+                    "value": {
+                      "value": "@pipeline().RunId",
+                      "type": "Expression"
+                    }
+                  },
+                  "ToBeResume": {
+                    "type": "Boolean",
+                    "value": {
+                      "value": "@pipeline().parameters.ToBeResumed",
+                      "type": "Expression"
+                    }
+                  }
+                },
+                "partitionOption": "None"
+              },
+              "dataset": {
+                "type": "DatasetReference",
+                "referenceName": "DS_SQL_BATCH_NEW",
+                "parameters": {}
+              }
+            }
+          },
+          {
+            "name": "AT_IF_ExecCheckLanded",
+            "type": "IfCondition",
+            "depends_on": [
+              "AT_LKP_InsertBatchDetails"
+            ],
+            "config": {
+              "expression": {
+                "type": "Expression",
+                "value": "@bool(activity('AT_LKP_InsertBatchDetails').output.firstRow.ToBeRun)"
+              },
+              "ifTrueActivities": [
+                {
+                  "name": "AT_SP_StartExecutionLog",
+                  "type": "SqlServerStoredProcedure",
+                  "dependsOn": [],
+                  "userProperties": [],
+                  "linkedServiceName": {
+                    "type": "LinkedServiceReference",
+                    "referenceName": "LS_ASQL"
+                  },
+                  "policy": {
+                    "timeout": "7.00:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false
+                  },
+                  "typeProperties": {
+                    "storedProcedureName": "[EtlLog].[uspExecutionStartLog]",
+                    "storedProcedureParameters": {
+                      "ActivityID": {
+                        "value": {
+                          "value": "@guid()",
+                          "type": "Expression"
+                        },
+                        "type": "Guid"
+                      },
+                      "ActivityName": {
+                        "value": {
+                          "value": "@pipeline().parameters.ActivityName",
+                          "type": "Expression"
+                        },
+                        "type": "String"
+                      },
+                      "BatchDetailID": {
+                        "value": {
+                          "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                          "type": "Expression"
+                        },
+                        "type": "Int32"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "AT_SP_EndExecutionLog_Success",
+                  "type": "SqlServerStoredProcedure",
+                  "dependsOn": [
+                    {
+                      "activity": "AT_CPY_CD_D_SOCS_CA_ABLBTOADLS_DESPNOTEHDR_LANDED",
+                      "dependencyConditions": [
+                        "Succeeded"
+                      ]
+                    }
+                  ],
+                  "userProperties": [],
+                  "linkedServiceName": {
+                    "type": "LinkedServiceReference",
+                    "referenceName": "LS_ASQL"
+                  },
+                  "policy": {
+                    "timeout": "7.00:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false
+                  },
+                  "typeProperties": {
+                    "storedProcedureName": "[EtlLog].[uspExecutionEndLogV1]",
+                    "storedProcedureParameters": {
+                      "ActivityName": {
+                        "value": {
+                          "value": "@pipeline().parameters.ActivityName",
+                          "type": "Expression"
+                        },
+                        "type": "String"
+                      },
+                      "BatchDetailID": {
+                        "value": {
+                          "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                          "type": "Expression"
+                        },
+                        "type": "Int32"
+                      },
+                      "RulesApplied": {
+                        "value": {
+                          "value": "@pipeline().parameters.RulesApplied",
+                          "type": "Expression"
+                        },
+                        "type": "Boolean"
+                      },
+                      "SourceName": {
+                        "value": {
+                          "value": "@pipeline().parameters.SourceName",
+                          "type": "Expression"
+                        },
+                        "type": "String"
+                      },
+                      "SourceObject": {
+                        "value": {
+                          "value": "@pipeline().parameters.SourceObject",
+                          "type": "Expression"
+                        },
+                        "type": "String"
+                      },
+                      "Status": {
+                        "value": "Succeeded",
+                        "type": "String"
+                      },
+                      "TargetObject": {
+                        "value": {
+                          "value": "@{concat(pipeline().parameters.TargetObject,'YYYY=',formatDateTime(UTCNOW(),'yyyy'))}/@{concat('MM=',formatDateTime(UTCNOW(),'MM'))}/@{concat('DD=',formatDateTime(UTCNOW(),'dd'))}",
+                          "type": "Expression"
+                        },
+                        "type": "String"
+                      },
+                      "SourceRowCount": {
+                        "value": {
+                          "value": "@activity('AT_CPY_CD_D_SOCS_CA_ABLBTOADLS_DESPNOTEHDR_LANDED').output.rowsRead",
+                          "type": "Expression"
+                        },
+                        "type": "Int32"
+                      },
+                      "TargetRowCount": {
+                        "value": {
+                          "value": "@activity('AT_CPY_CD_D_SOCS_CA_ABLBTOADLS_DESPNOTEHDR_LANDED').output.rowsCopied",
+                          "type": "Expression"
+                        },
+                        "type": "Int32"
+                      },
+                      "ErrorRowCount": {
+                        "value": {
+                          "value": "@pipeline().parameters.sp_null",
+                          "type": "Expression"
+                        },
+                        "type": "Int32"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "AT_SP_EndExecutionLog_Failure",
+                  "type": "SqlServerStoredProcedure",
+                  "dependsOn": [
+                    {
+                      "activity": "AT_CPY_CD_D_SOCS_CA_ABLBTOADLS_DESPNOTEHDR_LANDED",
+                      "dependencyConditions": [
+                        "Failed"
+                      ]
+                    }
+                  ],
+                  "userProperties": [],
+                  "linkedServiceName": {
+                    "type": "LinkedServiceReference",
+                    "referenceName": "LS_ASQL"
+                  },
+                  "policy": {
+                    "timeout": "7.00:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false
+                  },
+                  "typeProperties": {
+                    "storedProcedureName": "[EtlLog].[uspExecutionEndLogV1]",
+                    "storedProcedureParameters": {
+                      "ActivityName": {
+                        "value": {
+                          "value": "@pipeline().parameters.ActivityName",
+                          "type": "Expression"
+                        },
+                        "type": "String"
+                      },
+                      "BatchDetailID": {
+                        "value": {
+                          "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                          "type": "Expression"
+                        },
+                        "type": "Int32"
+                      },
+                      "RulesApplied": {
+                        "value": {
+                          "value": "@pipeline().parameters.RulesApplied",
+                          "type": "Expression"
+                        },
+                        "type": "Boolean"
+                      },
+                      "SourceName": {
+                        "value": {
+                          "value": "@pipeline().parameters.SourceName",
+                          "type": "Expression"
+                        },
+                        "type": "String"
+                      },
+                      "SourceObject": {
+                        "value": {
+                          "value": "@pipeline().parameters.SourceObject",
+                          "type": "Expression"
+                        },
+                        "type": "String"
+                      },
+                      "Status": {
+                        "value": "Failure",
+                        "type": "String"
+                      },
+                      "TargetObject": {
+                        "value": {
+                          "value": "@{concat(pipeline().parameters.TargetObject,'YYYY=',formatDateTime(UTCNOW(),'yyyy'))}/@{concat('MM=',formatDateTime(UTCNOW(),'MM'))}/@{concat('DD=',formatDateTime(UTCNOW(),'dd'))}",
+                          "type": "Expression"
+                        },
+                        "type": "String"
+                      },
+                      "SourceRowCount": {
+                        "value": {
+                          "value": "@pipeline().parameters.sp_null",
+                          "type": "Expression"
+                        },
+                        "type": "Int32"
+                      },
+                      "TargetRowCount": {
+                        "value": {
+                          "value": "@pipeline().parameters.sp_null",
+                          "type": "Expression"
+                        },
+                        "type": "Int32"
+                      },
+                      "ErrorRowCount": {
+                        "value": {
+                          "value": "@pipeline().parameters.sp_null",
+                          "type": "Expression"
+                        },
+                        "type": "Int32"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "AT_CPY_CD_D_SOCS_CA_ABLBTOADLS_DESPNOTEHDR_LANDED",
+                  "type": "Copy",
+                  "dependsOn": [
+                    {
+                      "activity": "AT_SP_StartExecutionLog",
+                      "dependencyConditions": [
+                        "Succeeded"
+                      ]
+                    }
+                  ],
+                  "userProperties": [],
+                  "policy": {
+                    "timeout": "7.00:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false
+                  },
+                  "inputs": [
+                    {
+                      "type": "DatasetReference",
+                      "referenceName": "DS_ABLB_SOCS_CA_SRC",
+                      "parameters": {}
+                    }
+                  ],
+                  "outputs": [
+                    {
+                      "type": "DatasetReference",
+                      "referenceName": "DS_ADLS_SOCS_CA_LANDED",
+                      "parameters": {
+                        "LandedFileLocation": {
+                          "value": "@pipeline().parameters.LandedFileLocation",
+                          "type": "Expression"
+                        },
+                        "LandedFileName": {
+                          "value": "@pipeline().parameters.SourceObject",
+                          "type": "Expression"
+                        }
+                      }
+                    }
+                  ],
+                  "typeProperties": {
+                    "source": {
+                      "type": "DelimitedTextSource",
+                      "storeSettings": {
+                        "type": "AzureBlobStorageReadSettings",
+                        "recursive": true,
+                        "wildcardFolderPath": {
+                          "value": "@pipeline().parameters.SourceFileLocation",
+                          "type": "Expression"
+                        },
+                        "wildcardFileName": {
+                          "value": "@pipeline().parameters.SourceFileName",
+                          "type": "Expression"
+                        }
+                      },
+                      "formatSettings": {
+                        "type": "DelimitedTextReadSettings"
+                      }
+                    },
+                    "sink": {
+                      "type": "DelimitedTextSink",
+                      "storeSettings": {
+                        "type": "AzureBlobFSWriteSettings"
+                      },
+                      "formatSettings": {
+                        "type": "DelimitedTextWriteSettings",
+                        "quoteAllText": true,
+                        "fileExtension": ".txt"
+                      }
+                    },
+                    "translator": {
+                      "type": "TabularTranslator",
+                      "mappings": [
+                        {
+                          "source": {
+                            "name": "MD",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "MD",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_NO",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_NO",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_RETAILER",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_RETAILER",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_SALESMAN",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_SALESMAN",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_WAREHOUSE",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_WAREHOUSE",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_USEDFORSUMMARY",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_USEDFORSUMMARY",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_INVOICENO",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_INVOICENO",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_DATE",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_DATE",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_TIME",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_TIME",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_EXPLANATION",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_EXPLANATION",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_ISPRINTED",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_ISPRINTED",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_VALID",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_VALID",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_DISCOUNTRATE",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_DISCOUNTRATE",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_VATTOTAL",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_VATTOTAL",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_TOTAL",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_TOTAL",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_DISCOUNT",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_DISCOUNT",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_GENERALDISCOUNT",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_GENERALDISCOUNT",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_ROUNDOFF",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_ROUNDOFF",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_HIDDENPRICE",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_HIDDENPRICE",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_EXTRATAX",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_EXTRATAX",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_TRANSACTIONNO",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_TRANSACTIONNO",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_TAXBASE",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_TAXBASE",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_SUMMARYINVOICE",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_SUMMARYINVOICE",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_TYPE",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_TYPE",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_DC",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_DC",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_CANCELNO",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_CANCELNO",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_GSTTOTAL",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_GSTTOTAL",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_PSTTOTAL",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_PSTTOTAL",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_HSTTOTAL",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_HSTTOTAL",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_CURRENCY",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_CURRENCY",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_CREDITRETAILER",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_CREDITRETAILER",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_REASONCODE",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_REASONCODE",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_ORDERNO",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_ORDERNO",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_SENDDATE",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_SENDDATE",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_CONFIRMED",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_CONFIRMED",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "MODUSER",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "MODUSER",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "CREDATE",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "CREDATE",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "MODDATE",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "MODDATE",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_STATUS",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_STATUS",
+                            "type": "String"
+                          }
+                        },
+                        {
+                          "source": {
+                            "name": "DNSH_CONFIRMDATE",
+                            "type": "String"
+                          },
+                          "sink": {
+                            "name": "DNSH_CONFIRMDATE",
+                            "type": "String"
+                          }
+                        }
+                      ]
+                    },
+                    "enableStaging": false,
+                    "dataIntegrationUnits": 0
+                  }
+                },
+                {
+                  "name": "AT_SP_EndExecutionLog_Success_OnSP_Fail",
+                  "type": "SqlServerStoredProcedure",
+                  "dependsOn": [
+                    {
+                      "activity": "AT_SP_EndExecutionLog_Success",
+                      "dependencyConditions": [
+                        "Failed"
+                      ]
+                    }
+                  ],
+                  "userProperties": [],
+                  "linkedServiceName": {
+                    "type": "LinkedServiceReference",
+                    "referenceName": "LS_ASQL"
+                  },
+                  "policy": {
+                    "timeout": "7.00:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false
+                  },
+                  "typeProperties": {
+                    "storedProcedureName": "[EtlLog].[uspExecutionEndLogV1]",
+                    "storedProcedureParameters": {
+                      "ActivityName": {
+                        "value": {
+                          "value": "@pipeline().parameters.ActivityName",
+                          "type": "Expression"
+                        },
+                        "type": "String"
+                      },
+                      "BatchDetailID": {
+                        "value": {
+                          "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                          "type": "Expression"
+                        },
+                        "type": "Int32"
+                      },
+                      "RulesApplied": {
+                        "value": {
+                          "value": "@pipeline().parameters.RulesApplied",
+                          "type": "Expression"
+                        },
+                        "type": "Boolean"
+                      },
+                      "SourceName": {
+                        "value": {
+                          "value": "@pipeline().parameters.SourceName",
+                          "type": "Expression"
+                        },
+                        "type": "String"
+                      },
+                      "SourceObject": {
+                        "value": {
+                          "value": "@pipeline().parameters.SourceObject",
+                          "type": "Expression"
+                        },
+                        "type": "String"
+                      },
+                      "Status": {
+                        "value": "Succeeded",
+                        "type": "String"
+                      },
+                      "TargetObject": {
+                        "value": {
+                          "value": "@{concat(pipeline().parameters.TargetObject,'YYYY=',formatDateTime(UTCNOW(),'yyyy'))}/@{concat('MM=',formatDateTime(UTCNOW(),'MM'))}/@{concat('DD=',formatDateTime(UTCNOW(),'dd'))}",
+                          "type": "Expression"
+                        },
+                        "type": "String"
+                      },
+                      "SourceRowCount": {
+                        "value": {
+                          "value": "@pipeline().parameters.sp_null",
+                          "type": "Expression"
+                        },
+                        "type": "Int32"
+                      },
+                      "TargetRowCount": {
+                        "value": {
+                          "value": "@pipeline().parameters.sp_null",
+                          "type": "Expression"
+                        },
+                        "type": "Int32"
+                      },
+                      "ErrorRowCount": {
+                        "value": {
+                          "value": "@pipeline().parameters.sp_null",
+                          "type": "Expression"
+                        },
+                        "type": "Int32"
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "AT_SP_EndExecutionErrorLog",
+                  "type": "SqlServerStoredProcedure",
+                  "dependsOn": [
+                    {
+                      "activity": "AT_SP_EndExecutionLog_Failure",
+                      "dependencyConditions": [
+                        "Succeeded"
+                      ]
+                    }
+                  ],
+                  "userProperties": [],
+                  "linkedServiceName": {
+                    "type": "LinkedServiceReference",
+                    "referenceName": "LS_ASQL"
+                  },
+                  "policy": {
+                    "timeout": "7.00:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false
+                  },
+                  "typeProperties": {
+                    "storedProcedureName": "[EtlLog].[uspExecutionErrorLog]",
+                    "storedProcedureParameters": {
+                      "ActivityName": {
+                        "value": {
+                          "value": "@pipeline().parameters.ActivityName",
+                          "type": "Expression"
+                        },
+                        "type": "String"
+                      },
+                      "BatchDetailID": {
+                        "value": {
+                          "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                          "type": "Expression"
+                        },
+                        "type": "Int32"
+                      },
+                      "DetailedErrorLocation": {
+                        "value": {
+                          "value": "@pipeline().parameters.sp_null",
+                          "type": "Expression"
+                        },
+                        "type": "String"
+                      },
+                      "ErrorMessage": {
+                        "value": {
+                          "value": "@activity('AT_CPY_CD_D_SOCS_CA_ABLBTOADLS_DESPNOTEHDR_LANDED').Error.message",
+                          "type": "Expression"
+                        },
+                        "type": "String"
+                      },
+                      "JobType": {
+                        "value": "Copy",
+                        "type": "String"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "AT_SP_EndBatchDetails",
+            "type": "SqlServerStoredProcedure",
+            "depends_on": [
+              "AT_IF_ExecCheckLanded"
+            ],
+            "config": {
+              "storedProcedureName": "[EtlLog].[uspBatchDetailEndLog]",
+              "storedProcedureParameters": {
+                "BatchDetailID": {
+                  "value": {
+                    "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                    "type": "Expression"
+                  },
+                  "type": "Int32"
+                }
+              }
+            }
+          }
+        ],
+        "dependencies": [
+          {
+            "activity": "AT_LKP_InsertBatchDetails",
+            "depends_on": []
+          },
+          {
+            "activity": "AT_IF_ExecCheckLanded",
+            "depends_on": [
+              "AT_LKP_InsertBatchDetails"
+            ]
+          },
+          {
+            "activity": "AT_SP_EndBatchDetails",
+            "depends_on": [
+              "AT_IF_ExecCheckLanded"
+            ]
+          }
+        ],
+        "parameters": {
+          "SliceStartTime": {
+            "type": "String",
+            "default": "2018-01-01"
+          },
+          "CustomSliceStart": {
+            "type": "Bool",
+            "default": false
+          },
+          "ToBeResumed": {
+            "type": "Bool",
+            "default": false
+          },
+          "ParentBatchId": {
+            "type": "Int",
+            "default": 1
+          },
+          "LoadType": {
+            "type": "String",
+            "default": "Incremental"
+          },
+          "PreviousSliceDateTime": {
+            "type": "String",
+            "default": "2018-01-02"
+          },
+          "sp_null": {
+            "type": "string",
+            "default": null
+          },
+          "SourceFileName": {
+            "type": "string",
+            "default": "DESP_NOTES_HEADER_*.txt.gz"
+          },
+          "LandedFileLocation": {
+            "type": "string",
+            "default": "unilever/UniversalDataLake/ExternalSources/SOCS/BlobFileShare/CA/DespNoteHeader/LandedFiles/"
+          },
+          "RulesApplied": {
+            "type": "string",
+            "default": "False"
+          },
+          "SourceName": {
+            "type": "string",
+            "default": "socs-canada"
+          },
+          "SourceFileLocation": {
+            "type": "string",
+            "default": "SOCS"
+          },
+          "TargetObject": {
+            "type": "string",
+            "default": "unilever/UniversalDataLake/ExternalSources/SOCS/BlobFileShare/CA/DespNoteHeader/LandedFiles/"
+          },
+          "ActivityName": {
+            "type": "string",
+            "default": "AT_CPY_CD_D_SOCS_CA_ABLBTOADLS_DESPNOTEHDR_LANDED"
+          },
+          "SourceObject": {
+            "type": "string",
+            "default": "DespNoteHeader"
+          }
+        },
+        "variables": [],
+        "captured_at": 1781097365.2286332
+      }]
+	  ,
+	  "dependencies": [
+          {
+            "activity": "AT_IF_ExecCheckMaster",
+            "depends_on": [
+              "AT_LKP_InsertBatch"
+            ]
+          },
+          {
+            "activity": "AT_SP_EndBatch",
+            "depends_on": [
+              "AT_IF_ExecCheckMaster"
+            ]
+          },
+          {
+            "activity": "AT_LKP_InsertBatch",
+            "depends_on": []
+          }
+        ],
+        "parameters": {
+          "SliceStartTime": {
+            "type": "String",
+            "default": "2018-01-01"
+          },
+          "CustomSliceStart": {
+            "type": "Bool",
+            "default": false
+          },
+          "ToBeResumed": {
+            "type": "Bool",
+            "default": false
+          },
+          "LoadType": {
+            "type": "String",
+            "default": "Full"
+          },
+          "sp_null": {
+            "type": "String",
+            "default": null
+          },
+          "SourceTableName": {
+            "type": "string",
+            "default": "th_pos_product_inclusion_CDLW"
+          },
+          "RefreshType": {
+            "type": "string",
+            "default": "Full Refresh"
+          },
+          "UDLPath": {
+            "type": "string",
+            "default": "/UniversalDataLake/InternalSources/U2K2/SQLServer/TH/ThPosProductInclusionCDLW/"
+          },
+          "delimiter": {
+            "type": "string",
+            "default": "|"
+          },
+          "FileName": {
+            "type": "string",
+            "default": "ThPosProductInclusionCDLW"
+          },
+          "SchemaName": {
+            "type": "string",
+            "default": "dbo"
+          }
+        },
+        "variables": [],
+        "captured_at": 1781097395.8897436
+      }
+    ],
+    "linked_services": [
+      {
+        "asset_type": "linked_service",
+        "name": "LS_KV_LOCAL",
+        "service_kind": "AzureKeyVault",
+        "uses_key_vault": true,
+        "captured_at": 1781097398.4937146
+      },
+      {
+        "asset_type": "linked_service",
+        "name": "LS_ABLB",
+        "service_kind": "AzureBlobStorage",
+        "uses_key_vault": true,
+        "captured_at": 1781097398.4939458
+      },
+      {
+        "asset_type": "linked_service",
+        "name": "LS_ADLS",
+        "service_kind": "AzureBlobFS",
+        "uses_key_vault": true,
+        "captured_at": 1781097398.4941266
+      },
+      {
+        "asset_type": "linked_service",
+        "name": "LS_ABLB_DATASEED",
+        "service_kind": "AzureBlobStorage",
+        "uses_key_vault": true,
+        "captured_at": 1781097398.4943407
+      },
+	  "triggers": [
+      {
+        "asset_type": "trigger",
+        "name": "TRG_CD_D_SOCS_DESPNOTEHEADER",
+        "trigger_kind": "BlobEventsTrigger",
+        "status": "Stopped",
+        "linked_pipelines": [
+          "PL_CD_D_SOCS_CA_ABLBTOUDL_DESPNOTEHEADER_MASTER"
+        ],
+        "schedule": {},
+        "captured_at": 1781097398.8578808
+      },
+      {
+        "asset_type": "trigger",
+        "name": "TRG_CD_D_SOCS_INVOICEHEADER",
+        "trigger_kind": "BlobEventsTrigger",
+        "status": "Stopped",
+        "linked_pipelines": [
+          "PL_CD_D_SOCS_CA_ABLBTOUDL_INVICHDR_MASTER"
+        ],
+        "schedule": {},
+        "captured_at": 1781097398.8578908
+      },
+      {
+        "asset_type": "trigger",
+        "name": "TRG_CD_D_SOCS_INVOICEROW",
+        "trigger_kind": "BlobEventsTrigger",
+        "status": "Stopped",
+        "linked_pipelines": [
+          "PL_CD_D_SOCS_CA_ABLBTOUDL_INVICROW_MASTER"
+        ],
+        "schedule": {},
+        "captured_at": 1781097398.8578947
+      },
+      {
+        "asset_type": "trigger",
+        "name": "TRG_CD_D_SOCS_ROUTES",
+        "trigger_kind": "BlobEventsTrigger",
+        "status": "Stopped",
+        "linked_pipelines": [
+          "PL_CD_D_SOCS_CA_ABLBTOUDL_ROUTES_MASTER"
+        ],
+        "schedule": {},
+        "captured_at": 1781097398.857896
+      },
+      {
+        "asset_type": "trigger",
+        "name": "TRG_CD_D_SOCS_PRODUCTS",
+        "trigger_kind": "BlobEventsTrigger",
+        "status": "Stopped",
+        "linked_pipelines": [
+          "PL_CD_D_SOCS_CA_ABLBTOUDL_PRODUCTS_MASTER"
+        ],
+        "schedule": {},
+        "captured_at": 1781097398.857899
+      }],
+	  "datasets": [
+      {
+        "asset_type": "dataset",
+        "name": "DS_ADLS_SOCS_CA_LANDED",
+        "type": "DelimitedText",
+        "linked_service": "LS_ADLS",
+        "schema": [],
+        "captured_at": 1781097396.0317328
+      },
+      {
+        "asset_type": "dataset",
+        "name": "DS_SQL_BATCH_NEW",
+        "type": "AzureSqlTable",
+        "linked_service": "LS_ASQL",
+        "schema": null,
+        "captured_at": 1781097396.031736
+      },
+      {
+        "asset_type": "dataset",
+        "name": "DS_ABLB_SOCS_CA_SRC",
+        "type": "DelimitedText",
+        "linked_service": "LS_ABLB",
+        "schema": [],
+        "captured_at": 1781097396.031737
+      },
+      {
+        "asset_type": "dataset",
+        "name": "DS_ADLS_SOCS_CA_PROCESSED",
+        "type": "Parquet",
+        "linked_service": "LS_ADLS",
+        "schema": [],
+        "captured_at": 1781097396.031738
+      },
+      {
+        "asset_type": "dataset",
+        "name": "DS_CD_DIGIFEM_ABLBTOADLS_DELTA_LANDED",
+        "type": "DelimitedText",
+        "linked_service": "LS_ADLS",
+        "schema": [],
+        "captured_at": 1781097396.031739
+      }],
+	  "integration_runtimes": [
+      {
+        "asset_type": "integration_runtime",
+        "name": "dfgw-onprem-01",
+        "type": "SelfHosted",
+        "captured_at": 1781097400.7834575
+      },
+      {
+        "asset_type": "integration_runtime",
+        "name": "dfgw-cloud-01",
+        "type": "SelfHosted",
+        "captured_at": 1781097400.952034
+      },
+      {
+        "asset_type": "integration_runtime",
+        "name": "dfgw-cloud-02",
+        "type": "SelfHosted",
+        "captured_at": 1781097401.1485424
+      },
+      {
+        "asset_type": "integration_runtime",
+        "name": "AutointegrationRuntime-Test",
+        "type": "Managed",
+        "captured_at": 1781097401.2310236
+      }
+    ]
+  },
+  "lineage": {
+    "PL_CD_D_TX_ABLBTOADLS_ACTPM_PROMOTIONS_ANZ_MASTER": [
+      [
+        "pipeline",
+        "PL_CD_D_TX_ACTPM_ABLBTOUDL_PROMOBASIC_ANZ_MASTER"
+      ],
+      [
+        "pipeline",
+        "PL_CD_D_TX_ACTPM_ABLBTOUDL_PROMOTACTICS_ANZ_MASTER"
+      ]
+    ],
+    "PL_CD_D_TX_ABLBTOADLS_ACTPM_PROMOTIONS_MASTER": [
+      [
+        "pipeline",
+        "PL_CD_D_TX_ACTPM_ABLBTOUDL_PROMOBASIC_NA_MASTER"
+      ],
+      [
+        "pipeline",
+        "PL_CD_D_TX_ACTPM_ABLBTOUDL_PROMOTACTICS_NA_MASTER"
+      ]
+    ],
+    "PL_CD_D_TX_ABLBTOADLS_ACTPM_PROMOTIONS_CH_MASTER": [
+      [
+        "pipeline",
+        "PL_CD_D_TX_ACTPM_ABLBTOUDL_PROMOBASIC_CH_MASTER"
+      ],
+      [
+        "pipeline",
+        "PL_CD_D_TX_ACTPM_ABLBTOUDL_PROMOTACTICS_CH_MASTER"
+      ]
+    ],
+    "PL_CD_D_TX_ABLBTOADLS_ACTPM_PROMOTIONS_A_MASTER": [
+      [
+        "pipeline",
+        "PL_CD_D_TX_ACTPM_ABLBTOUDL_PROMOBASIC_A_MASTER"
+      ],
+      [
+        "pipeline",
+        "PL_CD_D_TX_ACTPM_ABLBTOUDL_PROMOTACTICS_A_MASTER"
+      ]
+    ],
+    "PL_CD_D_ACTPM_SALESFORCE_ZA_PROMOTION_MASTER": [
+      [
+        "pipeline",
+        "PL_CD_D_ACTPM_SALESFORCE_ZA_PROMOTACTICS_MASTER"
+      ]
+    ],
+    "PL_CD_D_ACTPM_SALESFORCE_ID_PROMOTION_MASTER": [
+      [
+        "pipeline",
+        "PL_CD_D_ACTPM_SALESFORCE_ID_PROMOTACTICS_MASTER"
+      ]
+    ],
+    "PL_CD_D_ACTPM_SALESFORCE_TH_PROMOBASIC_MASTER": [
+      [
+        "pipeline",
+        "PL_CD_D_ACTPM_SALESFORCE_TH_PROMOTACTICS_MASTER"
+      ]
+    ],
+    "PL_CD_W_OPTIMIZE_MASTER": [
+      [
+        "pipeline",
+        "PL_CD_W_OPTIMIZE_EXECUTION"
+      ]
+    ],
+    "PL_CD_M_VACUUM_OPTIMIZE_LOOKUP_MASTER": [
+      [
+        "pipeline",
+        "PL_CD_M_VACUUM_OPTIMIZE_LOOKUP_INSERTION"
+      ]
+    ],
+    "PL_CD_W_TX_SECONDARYSALES_NAGUMO_BR_LASTMODIFIED_WEEKLY": [
+      [
+        "pipeline",
+        "PL_CD_W_TX_SECONDARYSALES_NAGUMO_BR_MASTER"
+      ]
+    ],
+    "PL_CD_M_TX_SECONDARYSALES_NAGUMO_BR_LASTMODIFIED_MONTHLY": [
+      [
+        "pipeline",
+        "PL_CD_M_TX_SECONDARYSALES_NAGUMO_BR_MASTER"
+      ]
+    ]
+  }
+}
+	  
