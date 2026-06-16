@@ -1,0 +1,117 @@
+{
+  "asset_type": "pipeline",
+  "factory": "bieno-da19-b-901448-adf-01",
+  "pipeline": "PL_HR_W_BDL_Catalog",
+  "activity_count": 4,
+  "activity_kinds": [
+    "DatabricksNotebook",
+    "ExecutePipeline"
+  ],
+  "activities_detail": [
+    {
+      "name": "PL_JMF_Insert_Details",
+      "type": "ExecutePipeline",
+      "depends_on": [],
+      "config": {
+        "pipeline": "PL_JMF_Insert_Details",
+        "parameters": {
+          "JobName": "@pipeline().Pipeline",
+          "RunID": "@pipeline().RunId"
+        }
+      }
+    },
+    {
+      "name": "Technical_Catalogue_Storage",
+      "type": "DatabricksNotebook",
+      "depends_on": [
+        "PL_JMF_Insert_Details"
+      ],
+      "config": {
+        "notebook_path": "@pipeline().parameters.NotebookPath",
+        "parameters": {
+          "inparam_TransactionPath": "@pipeline().parameters.inparam_TransactionPath",
+          "inparam_referencePath": "@pipeline().parameters.inparam_referencePath",
+          "inparam_CustomLookupPath": "@pipeline().parameters.inparam_CustomLookupPath",
+          "inparam_Storage_Catalogue_Tgt_Path": "@pipeline().parameters.inparam_Storage_Catalogue_Tgt_Path"
+        }
+      }
+    },
+    {
+      "name": "PL_JMF_Update_Sucess_Details",
+      "type": "ExecutePipeline",
+      "depends_on": [
+        "Technical_Catalogue_Storage"
+      ],
+      "config": {
+        "pipeline": "PL_JMF_Update_Sucess_Details",
+        "parameters": {
+          "RunID": "@pipeline().RunId"
+        }
+      }
+    },
+    {
+      "name": "PL_JMF_Update_Fail_Details_Audit_Complete",
+      "type": "ExecutePipeline",
+      "depends_on": [
+        "Technical_Catalogue_Storage"
+      ],
+      "config": {
+        "pipeline": "PL_JMF_Update_Fail_Details",
+        "parameters": {
+          "RunID": "@pipeline().RunId"
+        }
+      }
+    }
+  ],
+  "dependencies": [
+    {
+      "activity": "PL_JMF_Insert_Details",
+      "depends_on": []
+    },
+    {
+      "activity": "Technical_Catalogue_Storage",
+      "depends_on": [
+        "PL_JMF_Insert_Details"
+      ]
+    },
+    {
+      "activity": "PL_JMF_Update_Sucess_Details",
+      "depends_on": [
+        "Technical_Catalogue_Storage"
+      ]
+    },
+    {
+      "activity": "PL_JMF_Update_Fail_Details_Audit_Complete",
+      "depends_on": [
+        "Technical_Catalogue_Storage"
+      ]
+    }
+  ],
+  "parameters": {
+    "NotebookPath": {
+      "type": "string",
+      "default": "/Unilever/BDL/HR/SharedLib/Technical_Catalogue"
+    },
+    "inparam_TransactionPath": {
+      "type": "string",
+      "default": "BusinessDataLake/HR/TransactionObject"
+    },
+    "inparam_referencePath": {
+      "type": "string",
+      "default": "BusinessDataLake/HR/ReferenceObject"
+    },
+    "inparam_CustomLookupPath": {
+      "type": "string",
+      "default": "BusinessDataLake/HR/CustomLookup"
+    },
+    "inparam_EmployeePath": {
+      "type": "string",
+      "default": "BusinessDataLake/HR/Employee"
+    },
+    "inparam_Storage_Catalogue_Tgt_Path": {
+      "type": "string",
+      "default": "/BusinessDataLake/HR/Logs/BDLCatalog/TechnicalCatalogue/Storage_Catalogue/"
+    }
+  },
+  "variables": []
+}
