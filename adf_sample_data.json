@@ -1135,6 +1135,13 @@
         "uses_key_vault": true,
         "captured_at": 1781097398.4941266
       },
+		{
+        "asset_type": "linked_service",
+        "name": "LS_ASQL",
+        "service_kind": "AzureSqlDatabase",
+        "uses_key_vault": true,
+        "captured_at": 1781097398.4947612
+      },
       {
         "asset_type": "linked_service",
         "name": "LS_ABLB_DATASEED",
