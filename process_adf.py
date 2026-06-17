@@ -10,6 +10,13 @@ def extract_value(val):
         return val.get('value')
     return val
 
+def extract_wildcard(params):
+    # Only return values that contain wildcard characters
+    val = extract_value(params.get('SourceFileName'))
+    if val and isinstance(val, str) and ('*' in val or '?' in val):
+        return val
+    return ""
+
 def find_activities(activities):
     found = []
     if not activities:
@@ -133,10 +140,7 @@ def process_adf_json(json_file_path):
                     )
 
                     # ✅ wildcard
-                    landed_info['wildcard'] = extract_value(
-                        params.get('FieldDelimiter')
-                        or params.get('SourceFileName')
-                    )
+                    landed_info['wildcard'] = extract_wildcard(params)
 
                     # New Info
                     info = get_pipeline_info(ref_name, pipelines_dict, datasets_dict)
@@ -158,10 +162,7 @@ def process_adf_json(json_file_path):
                         or params.get('SourceObject')
                     )
 
-                    processed_info['wildcard'] = extract_value(
-                        params.get('FieldDelimiter')
-                        or params.get('SourceFileName')
-                    )
+                    processed_info['wildcard'] = extract_wildcard(params)
 
                     # New Info
                     info = get_pipeline_info(ref_name, pipelines_dict, datasets_dict)
