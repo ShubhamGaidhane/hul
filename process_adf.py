@@ -11,11 +11,19 @@ def extract_value(val):
     return val
 
 def extract_wildcard(params):
-    # Only return values that contain wildcard characters
+    findings = []
+    # Wildcard from SourceFileName
     val = extract_value(params.get('SourceFileName'))
     if val and isinstance(val, str) and ('*' in val or '?' in val):
-        return val
-    return ""
+        findings.append(val)
+
+    # Delimiters
+    for key in ['FieldDelimiter', 'Delimeter', 'delimiter']:
+        d = extract_value(params.get(key))
+        if d and isinstance(d, str):
+            findings.append(d)
+
+    return ", ".join(list(set(findings)))
 
 def find_activities(activities):
     found = []
@@ -56,6 +64,7 @@ def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict):
     ls_names = set()
     dataset_jsons = []
     copy_logics = []
+    internal_wildcards = set()
 
     for act in activities:
         # Linked Service from activity
@@ -88,10 +97,20 @@ def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict):
             if translator:
                 copy_logics.append(translator)
 
+        # Check for wildcards and delimiters in inputs/outputs parameters
+        for ds_ref in inputs + outputs:
+            ds_params = ds_ref.get('parameters', {})
+            if ds_params:
+                w = extract_wildcard(ds_params)
+                if w:
+                    for item in w.split(", "):
+                        internal_wildcards.add(item)
+
     return {
         "linked_services": list(filter(None, ls_names)),
         "datasets": dataset_jsons,
-        "copy_logic": copy_logics
+        "copy_logic": copy_logics,
+        "wildcards": list(internal_wildcards)
     }
 
 # -----------------------------------
@@ -140,7 +159,11 @@ def process_adf_json(json_file_path):
                     )
 
                     # ✅ wildcard
-                    landed_info['wildcard'] = extract_wildcard(params)
+                    wildcards = set()
+                    w = extract_wildcard(params)
+                    if w:
+                        for item in w.split(", "):
+                            wildcards.add(item)
 
                     # New Info
                     info = get_pipeline_info(ref_name, pipelines_dict, datasets_dict)
@@ -148,6 +171,10 @@ def process_adf_json(json_file_path):
                         landed_info['ls_config'] = ", ".join(info['linked_services'])
                         landed_info['datasets'] = json.dumps(info['datasets'])
                         landed_info['copy_logic'] = json.dumps(info['copy_logic'])
+                        for item in info.get('wildcards', []):
+                            wildcards.add(item)
+
+                    landed_info['wildcard'] = ", ".join(list(wildcards))
 
                 # -------------------------
                 # ✅ PROCESSED
@@ -162,12 +189,21 @@ def process_adf_json(json_file_path):
                         or params.get('SourceObject')
                     )
 
-                    processed_info['wildcard'] = extract_wildcard(params)
+                    # ✅ wildcard
+                    wildcards = set()
+                    w = extract_wildcard(params)
+                    if w:
+                        for item in w.split(", "):
+                            wildcards.add(item)
 
                     # New Info
                     info = get_pipeline_info(ref_name, pipelines_dict, datasets_dict)
                     if info:
                         processed_info['datasets'] = json.dumps(info['datasets'])
+                        for item in info.get('wildcards', []):
+                            wildcards.add(item)
+
+                    processed_info['wildcard'] = ", ".join(list(wildcards))
 
         # ✅ Only include valid mappings
         if not landed_info and not processed_info:
