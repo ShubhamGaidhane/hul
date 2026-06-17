@@ -1,5 +1,5 @@
 # ================================
-# 1. Date Logic (Same as before)
+# 1. Date Logic
 # ================================
 from datetime import datetime, timedelta
 
@@ -14,7 +14,7 @@ date_list = [CM, PM]
 
 
 # ================================
-# 2. ABFSS Source Paths (All Environments)
+# 2. ABFSS Source Paths
 # ================================
 
 base_paths = [
@@ -31,7 +31,7 @@ base_paths = [
 
 
 # ================================
-# 3. Build Paths (Fixed Wildcards & Slashes)
+# 3. Build Paths (Explicit 8-level wildcard)
 # ================================
 
 paths = []
@@ -41,20 +41,21 @@ for date in date_list:
     mm = int(date[5:7])
 
     for base in base_paths:
-        # rstrip("/") prevents double slashes.
-        # resourceId=** allows Spark to find the nested y= and m= folders regardless of depth.
-        path = f"{base.rstrip('/')}/resourceId=**/y={yyyy}/m={format(mm, '02d')}/*"
+        # Azure Diagnostic Logs for ADF have exactly 8 levels of sub-folders under resourceId=
+        # /SUBSCRIPTIONS/<sub-id>/RESOURCEGROUPS/<rg-name>/PROVIDERS/MICROSOFT.DATAFACTORY/FACTORIES/<factory-name>/
+        # After that, it follows the y=YYYY/m=MM/d=DD/h=HH/m=MM/PT1H.json structure.
+        path = f"{base.rstrip('/')}/resourceId=/*/*/*/*/*/*/*/*/y={yyyy}/m={format(mm, '02d')}/*/*/*/*.json"
         paths.append(path)
 
 print(f"Total source paths: {len(paths)}")
 
 
 # ================================
-# 4. Read JSON Logs (With Error Handling)
+# 4. Read JSON Logs
 # ================================
 from pyspark.sql.types import StructType, StructField, StringType
 
-# CRITICAL: Ignore missing paths so the whole job doesn't fail if one account is empty
+# CRITICAL: Prevent the job from failing if some paths/months are empty
 spark.conf.set("spark.sql.files.ignoreMissingFiles", "true")
 spark.conf.set("spark.sql.files.ignoreEmptyFiles", "true")
 
@@ -78,7 +79,7 @@ df = df.repartition(128)
 
 
 # ================================
-# 5. JSON Extraction Logic (Optimized for correctness)
+# 5. JSON Extraction Logic (Corrected Recursive iget)
 # ================================
 import json
 from pyspark.sql.functions import col, udf
@@ -88,10 +89,12 @@ def iget(d, k):
     if d is None:
         return None
 
+    # If we encounter a JSON string, parse it. This handles nested JSON strings
+    # common in ADF logs (e.g., properties.Input is often a string).
     if isinstance(d, str):
         try:
             d = json.loads(d)
-        except (ValueError, TypeError):
+        except:
             return None
 
     if isinstance(d, list):
@@ -110,6 +113,7 @@ def iget(d, k):
 
 
 def get_activityPipelineRunId(properties):
+    # Initial properties is a string
     return iget(properties, ['Output', 'pipelineRunId'])
 
 def get_notebookpath(properties):
@@ -126,6 +130,7 @@ def get_error(properties):
 
 
 def get_logical_jobname(properties):
+    # Map multiple possible locations for LogicalJobName
     mapping = [
         ['Input', 'baseParameters', 'LogicalJobName'],
         ['Input', 'baseParameters', 'Logical_JobName'],
@@ -137,20 +142,18 @@ def get_logical_jobname(properties):
         ['Input', 'baseParameters', 'inParamFileDetailsJSON', 'logical_jobname'],
     ]
 
-    # To avoid multiple json.loads of the root properties string,
-    # we can parse it once if it's a string.
+    # Parse the root properties once
     try:
         data = json.loads(properties) if isinstance(properties, str) else properties
     except:
         return None
 
-    output = None
     for m in mapping:
         output = iget(data, m)
         if output:
-            break
+            return output
 
-    return output
+    return None
 
 
 activityPipelineRunIdUDF = udf(get_activityPipelineRunId)
@@ -183,6 +186,7 @@ from pyspark.sql.functions import lit, current_timestamp
 df3 = df2.withColumn("data_load_for", lit(str(date_list)))
 df3 = df3.withColumn("record_update_time", current_timestamp())
 
+# Verification
 df3.filter(df3.activityType == "DatabricksNotebook").show()
 
 
