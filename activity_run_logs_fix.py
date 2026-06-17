@@ -1,17 +1,30 @@
 # ================================
-# 1. Date Logic
+# 1. Date Logic (Excluding Today)
 # ================================
 from datetime import datetime, timedelta
 
 today = datetime.today()
+yesterday = today - timedelta(days=1)
 
-CM = today.strftime("%Y-%m")  # current month
-first = today.replace(day=1)
-prev_month = first - timedelta(days=1)
-PM = prev_month.strftime("%Y-%m")  # previous month
+def get_days_in_month(y, m):
+    if m == 12:
+        return (datetime(y+1, 1, 1) - datetime(y, m, 1)).days
+    return (datetime(y, m+1, 1) - datetime(y, m, 1)).days
 
-date_list = [CM, PM]
+# Current Month Logic (up to yesterday)
+cm_y, cm_m = yesterday.year, yesterday.month
+cm_days = [f"{d:02d}" for d in range(1, yesterday.day + 1)]
+cm_glob = "{" + ",".join(cm_days) + "}"
 
+# Previous Month Logic (full month)
+first_of_cm = today.replace(day=1)
+last_of_pm = first_of_cm - timedelta(days=1)
+pm_y, pm_m = last_of_pm.year, last_of_pm.month
+pm_days = [f"{d:02d}" for d in range(1, get_days_in_month(pm_y, pm_m) + 1)]
+pm_glob = "{" + ",".join(pm_days) + "}"
+
+print(f"Current Month Glob: {cm_y}-{cm_m:02d}/d={cm_glob}")
+print(f"Previous Month Glob: {pm_y}-{pm_m:02d}/d={pm_glob}")
 
 # ================================
 # 2. ABFSS Source Paths
@@ -29,35 +42,10 @@ base_paths = [
     "abfss://insights-logs-activityruns@dbstorageda18p902664adls.dfs.core.windows.net/"
 ]
 
-
 # ================================
-# 3. Build Paths (Explicit 8-level wildcard)
-# ================================
-
-paths = []
-
-for date in date_list:
-    yyyy = int(date[0:4])
-    mm = int(date[5:7])
-
-    for base in base_paths:
-        # Azure Diagnostic Logs for ADF have exactly 8 levels of sub-folders under resourceId=
-        # /SUBSCRIPTIONS/<sub-id>/RESOURCEGROUPS/<rg-name>/PROVIDERS/MICROSOFT.DATAFACTORY/FACTORIES/<factory-name>/
-        # After that, it follows the y=YYYY/m=MM/d=DD/h=HH/m=MM/PT1H.json structure.
-        path = f"{base.rstrip('/')}/resourceId=/*/*/*/*/*/*/*/*/y={yyyy}/m={format(mm, '02d')}/*/*/*/*.json"
-        paths.append(path)
-
-print(f"Total source paths: {len(paths)}")
-
-
-# ================================
-# 4. Read JSON Logs
+# 3. Path Discovery and Reading
 # ================================
 from pyspark.sql.types import StructType, StructField, StringType
-
-# CRITICAL: Prevent the job from failing if some paths/months are empty
-spark.conf.set("spark.sql.files.ignoreMissingFiles", "true")
-spark.conf.set("spark.sql.files.ignoreEmptyFiles", "true")
 
 schema = StructType([
     StructField("pipelineName", StringType(), True),
@@ -74,46 +62,60 @@ schema = StructType([
     StructField("end", StringType(), True)
 ])
 
-df = spark.read.schema(schema).json(paths)
-df = df.repartition(128)
+final_df = None
 
+for base in base_paths:
+    # Check if resourceId directory exists to avoid PATH_NOT_FOUND
+    # Since we can't use spark.sql.files.ignoreMissingFiles, we must be sure the root exists
+    try:
+        # In Databricks, dbutils.fs.ls returns an error if the path doesn't exist
+        dbutils.fs.ls(f"{base.rstrip('/')}/resourceId=")
+    except:
+        print(f"Skipping {base} - resourceId folder not found.")
+        continue
+
+    # Build paths for Current and Previous Months
+    paths = [
+        f"{base.rstrip('/')}/resourceId=/*/*/*/*/*/*/*/*/y={cm_y}/m={cm_m:02d}/d={cm_glob}/*/*/*.json",
+        f"{base.rstrip('/')}/resourceId=/*/*/*/*/*/*/*/*/y={pm_y}/m={pm_m:02d}/d={pm_glob}/*/*/*.json"
+    ]
+
+    try:
+        temp_df = spark.read.schema(schema).json(paths)
+        if final_df is None:
+            final_df = temp_df
+        else:
+            final_df = final_df.unionByName(temp_df)
+    except Exception as e:
+        # This handles cases where specific months/days are missing for this account
+        print(f"No logs found for {base} in the requested period.")
+
+if final_df is None:
+    raise Exception("No logs found in any of the provided storage accounts.")
+
+df = final_df.repartition(128)
 
 # ================================
-# 5. JSON Extraction Logic (Corrected Recursive iget)
+# 4. JSON Extraction Logic (Recursive iget)
 # ================================
 import json
 from pyspark.sql.functions import col, udf
 from pyspark.sql.types import StringType, MapType
 
 def iget(d, k):
-    if d is None:
-        return None
-
-    # If we encounter a JSON string, parse it. This handles nested JSON strings
-    # common in ADF logs (e.g., properties.Input is often a string).
+    if d is None: return None
     if isinstance(d, str):
-        try:
-            d = json.loads(d)
-        except:
-            return None
-
+        try: d = json.loads(d)
+        except: return None
     if isinstance(d, list):
-        if d:
-            d = d[0]
-        else:
-            return None
+        if d: d = d[0]
+        else: return None
+    if not isinstance(d, dict): return None
 
-    if not isinstance(d, dict):
-        return None
-
-    if len(k) == 1:
-        return d.get(k[0])
-    else:
-        return iget(d.get(k[0]), k[1:])
-
+    if len(k) == 1: return d.get(k[0])
+    else: return iget(d.get(k[0]), k[1:])
 
 def get_activityPipelineRunId(properties):
-    # Initial properties is a string
     return iget(properties, ['Output', 'pipelineRunId'])
 
 def get_notebookpath(properties):
@@ -128,9 +130,7 @@ def get_baseParameters(properties):
 def get_error(properties):
     return iget(properties, ['Error'])
 
-
 def get_logical_jobname(properties):
-    # Map multiple possible locations for LogicalJobName
     mapping = [
         ['Input', 'baseParameters', 'LogicalJobName'],
         ['Input', 'baseParameters', 'Logical_JobName'],
@@ -141,20 +141,14 @@ def get_logical_jobname(properties):
         ['Input', 'baseParameters', 'inParamFileDetailsJSON', 'Logical_Jobname'],
         ['Input', 'baseParameters', 'inParamFileDetailsJSON', 'logical_jobname'],
     ]
-
-    # Parse the root properties once
     try:
         data = json.loads(properties) if isinstance(properties, str) else properties
     except:
         return None
-
     for m in mapping:
         output = iget(data, m)
-        if output:
-            return output
-
+        if output: return output
     return None
-
 
 activityPipelineRunIdUDF = udf(get_activityPipelineRunId)
 notebookPathUDF = udf(get_notebookpath)
@@ -163,9 +157,8 @@ baseParametersUDF = udf(get_baseParameters, MapType(StringType(), StringType()))
 errorUDF = udf(get_error, MapType(StringType(), StringType()))
 logicalJobNameUDF = udf(get_logical_jobname)
 
-
 # ================================
-# 6. Apply Transformations
+# 5. Apply Transformations
 # ================================
 df2 = df.select(
     "*",
@@ -177,23 +170,19 @@ df2 = df.select(
     errorUDF(col("properties")).alias("error")
 )
 
-
 # ================================
-# 7. Add Metadata
+# 6. Add Metadata
 # ================================
 from pyspark.sql.functions import lit, current_timestamp
 
-df3 = df2.withColumn("data_load_for", lit(str(date_list)))
+df3 = df2.withColumn("data_load_for", lit(f"PM: {pm_y}-{pm_m:02d}, CM: {cm_y}-{cm_m:02d} up to day {yesterday.day}"))
 df3 = df3.withColumn("record_update_time", current_timestamp())
 
-# Verification
 df3.filter(df3.activityType == "DatabricksNotebook").show()
 
-
 # ================================
-# 8. Write to Delta (External Location)
+# 7. Write to Delta (External Location)
 # ================================
-
 target_path = "abfss://<your-target-container>@<storage-account>.dfs.core.windows.net/<path>/ADFActivityRunLogs"
 
 df3.repartition(16).write.format("delta") \
@@ -201,9 +190,8 @@ df3.repartition(16).write.format("delta") \
     .option("overwriteSchema", "true") \
     .save(target_path)
 
-
 # ================================
-# 9. Create Table (Unity Catalog)
+# 8. Create Table (Unity Catalog)
 # ================================
 spark.sql(f"""
 CREATE TABLE IF NOT EXISTS <catalog>.<schema>.ADFActivityRunLogs
