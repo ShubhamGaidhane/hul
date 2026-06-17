@@ -127,6 +127,14 @@ def process_adf_json(json_file_path):
     pipelines_dict = {p.get('pipeline'): p for p in pipelines_list}
     datasets_dict = {d.get('name'): d for d in datasets_list}
 
+    triggers_list = catalog.get("triggers", [])
+    triggers_by_pipeline = {}
+    for trig in triggers_list:
+        for p_name in trig.get('linked_pipelines', []):
+            if p_name not in triggers_by_pipeline:
+                triggers_by_pipeline[p_name] = []
+            triggers_by_pipeline[p_name].append(trig)
+
     results = []
 
     for pipe in pipelines_list:
@@ -209,8 +217,25 @@ def process_adf_json(json_file_path):
         if not landed_info and not processed_info:
             continue
 
+        # Triggers
+        pipeline_triggers = triggers_by_pipeline.get(master_pipeline, [])
+        trigger_names = ", ".join([t.get('name', '') for t in pipeline_triggers])
+        trigger_types = ", ".join([t.get('trigger_kind', '') for t in pipeline_triggers])
+
+        trigger_times = []
+        for t in pipeline_triggers:
+            sched = t.get('schedule', {})
+            if sched and 'recurrence' in sched:
+                trigger_times.append(json.dumps(sched['recurrence']))
+            else:
+                trigger_times.append(json.dumps(sched))
+        trigger_time_str = ", ".join(trigger_times)
+
         results.append({
             "Master Pipeline": master_pipeline,
+            "Trigger Name": trigger_names,
+            "Trigger Time": trigger_time_str,
+            "Trigger Type": trigger_types,
             "Landed Pipeline": landed_info.get('pipeline', ''),
             "Processed Pipeline": processed_info.get('pipeline', ''),
 
