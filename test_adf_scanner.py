@@ -21,7 +21,6 @@ class TestADFScanner(unittest.TestCase):
         self.rg_name = "test-rg"
         self.factory_name = "test-factory"
 
-        # Manually inject a mock client
         self.mock_client = MagicMock()
         with patch('azure.identity.ClientSecretCredential'):
             with patch('azure.mgmt.datafactory.DataFactoryManagementClient', return_value=self.mock_client):
@@ -31,16 +30,15 @@ class TestADFScanner(unittest.TestCase):
                     self.client_id,
                     self.client_secret
                 )
-                self.scanner.client = self.mock_client # Ensure it uses our mock
+                self.scanner.client = self.mock_client
 
     def test_collect_pipeline_insights(self):
-        # Mock activities
         act1 = MagicMock()
         act1.name = 'act1'
         act1.type = 'Copy'
-        act1.inputs = [MagicMock(reference_name='ds_in')]
-        act1.outputs = [MagicMock(reference_name='ds_out')]
-        act1.serialize.return_value = {'name': 'act1', 'type': 'Copy'}
+        act1.inputs = []
+        act1.outputs = []
+        act1.serialize.return_value = {'name': 'act1', 'type': 'Copy', 'typeProperties': {}}
 
         pipe_detail = MagicMock()
         pipe_detail.name = 'test_pipe'
@@ -52,18 +50,18 @@ class TestADFScanner(unittest.TestCase):
         self.mock_client.pipelines.list_by_factory.return_value = [pipe_detail]
 
         self.scanner.collect_pipeline_insights(self.rg_name, self.factory_name)
-
         self.assertEqual(len(self.scanner.catalog['pipelines']), 1)
 
     def test_collect_datasets(self):
         ds_detail = MagicMock()
         ds_detail.name = 'ds1'
-        ds_detail.properties.type = 'DelimitedText'
-        ds_detail.properties.linked_service_name.reference_name = 'ls1'
-        # Mock type_properties with column_delimiter
-        ds_detail.properties.type_properties = MagicMock()
-        ds_detail.properties.type_properties.column_delimiter = ','
-        ds_detail.as_dict.return_value = {'name': 'ds1'}
+        ds_detail.as_dict.return_value = {
+            'properties': {
+                'type': 'DelimitedText',
+                'linkedServiceName': {'referenceName': 'ls1'},
+                'typeProperties': {'columnDelimiter': ','}
+            }
+        }
 
         self.mock_client.datasets.list_by_factory.return_value = [ds_detail]
 
@@ -74,14 +72,16 @@ class TestADFScanner(unittest.TestCase):
     def test_collect_triggers(self):
         tr_detail = MagicMock()
         tr_detail.name = 'tr1'
-        tr_detail.properties.type = 'ScheduleTrigger'
-        tr_detail.properties.runtime_state = 'Started'
-        tr_detail.properties.pipelines = [MagicMock()]
-        tr_detail.properties.pipelines[0].pipeline_reference.reference_name = 'p1'
-        # Mock type_properties with recurrence start_time
-        tr_detail.properties.type_properties = MagicMock()
-        tr_detail.properties.type_properties.recurrence.start_time = '2023-01-01T00:00:00Z'
-        tr_detail.serialize.return_value = {'name': 'tr1', 'properties': {'type': 'ScheduleTrigger'}}
+        tr_detail.serialize.return_value = {
+            'properties': {
+                'type': 'ScheduleTrigger',
+                'runtimeState': 'Started',
+                'pipelines': [{'pipelineReference': {'referenceName': 'p1'}}],
+                'typeProperties': {
+                    'recurrence': {'startTime': '2023-01-01T00:00:00Z'}
+                }
+            }
+        }
 
         self.mock_client.triggers.list_by_factory.return_value = [tr_detail]
 

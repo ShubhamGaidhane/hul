@@ -74,8 +74,7 @@ def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict):
             else:
                 ls_names.add(ls_ref)
 
-        # Datasets from activity (Copy activity)
-        # Note: inputs and outputs are now at the top level of normalized activity
+        # Datasets from activity
         inputs = act.get('inputs') or []
         outputs = act.get('outputs') or []
 
@@ -85,17 +84,16 @@ def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict):
                 ds_obj = datasets_dict.get(ds_name)
                 if ds_obj:
                     dataset_jsons.append(ds_obj)
-                    # Linked service from dataset
                     ls_name = ds_obj.get('linked_service') or ds_obj.get('linkedServiceName', {}).get('referenceName')
                     if ls_name:
                         ls_names.add(ls_name)
 
-                    # Delimiter from dataset
+                    # Delimiter from dataset property
                     d = ds_obj.get('delimiter')
                     if d:
                         internal_wildcards.add(d)
 
-                # Check for wildcards and delimiters in inputs/outputs parameters
+                # Delimiter/Wildcard from DatasetReference parameters
                 ds_params = ds_ref.get('parameters', {})
                 if ds_params:
                     w = extract_wildcard(ds_params)
@@ -103,7 +101,7 @@ def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict):
                         for item in w.split(", "):
                             internal_wildcards.add(item)
 
-        # Copy logic (translator) - Check both config and typeProperties
+        # Copy logic (translator)
         config = act.get('config', {})
         translator = config.get('translator') or act.get('typeProperties', {}).get('translator')
         if translator:
@@ -152,79 +150,52 @@ def process_adf_json(json_file_path):
         for activity in activities:
             if activity.get('type') == 'ExecutePipeline':
                 config = activity.get('config', {})
-                # Try new 'config' then old 'typeProperties'
                 ref_name = config.get('pipeline') or activity.get('typeProperties', {}).get('pipeline', {}).get('referenceName', '')
                 params = config.get('parameters') or activity.get('typeProperties', {}).get('parameters', {})
 
-                # -------------------------
-                # ✅ LANDED
-                # -------------------------
+                if not ref_name:
+                    continue
+
+                target = None
                 if 'LANDED' in ref_name.upper():
-                    landed_info['pipeline'] = ref_name
-                    landed_info['variables'] = json.dumps(params)
-
-                    # ✅ path
-                    landed_info['path'] = extract_value(
-                        params.get('UDLPath')
-                        or params.get('TargetObject')
-                        or params.get('SourceObject')
-                    )
-
-                    # ✅ wildcard
-                    wildcards = set()
-                    w = extract_wildcard(params)
-                    if w:
-                        for item in w.split(", "):
-                            wildcards.add(item)
-
-                    # New Info
-                    info = get_pipeline_info(ref_name, pipelines_dict, datasets_dict)
-                    if info:
-                        landed_info['ls_config'] = ", ".join(info['linked_services'])
-                        landed_info['datasets'] = json.dumps(info['datasets'])
-                        landed_info['copy_logic'] = json.dumps(info['copy_logic'])
-                        for item in info.get('wildcards', []):
-                            wildcards.add(item)
-
-                    landed_info['wildcard'] = ", ".join(list(wildcards))
-
-                # -------------------------
-                # ✅ PROCESSED
-                # -------------------------
+                    target = landed_info
                 elif 'PROCESSED' in ref_name.upper():
-                    processed_info['pipeline'] = ref_name
-                    processed_info['variables'] = json.dumps(params)
+                    target = processed_info
 
-                    processed_info['path'] = extract_value(
+                if target is not None:
+                    target['pipeline'] = ref_name
+                    target['variables'] = json.dumps(params)
+                    target['path'] = extract_value(
                         params.get('UDLPath')
                         or params.get('TargetObject')
                         or params.get('SourceObject')
                     )
 
-                    # ✅ wildcard
                     wildcards = set()
                     w = extract_wildcard(params)
                     if w:
                         for item in w.split(", "):
                             wildcards.add(item)
 
-                    # New Info
                     info = get_pipeline_info(ref_name, pipelines_dict, datasets_dict)
                     if info:
-                        processed_info['datasets'] = json.dumps(info['datasets'])
+                        if target == landed_info:
+                            target['ls_config'] = ", ".join(info['linked_services'])
+                            target['copy_logic'] = json.dumps(info['copy_logic'])
+
+                        target['datasets'] = json.dumps(info['datasets'])
                         for item in info.get('wildcards', []):
                             wildcards.add(item)
 
-                    processed_info['wildcard'] = ", ".join(list(wildcards))
+                    target['wildcard'] = ", ".join(list(wildcards))
 
-        # ✅ Only include valid mappings
         if not landed_info and not processed_info:
             continue
 
         # Triggers
         pipeline_triggers = triggers_by_pipeline.get(master_pipeline, [])
         trigger_names = ", ".join([t.get('name', '') for t in pipeline_triggers])
-        trigger_types = ", ".join([t.get('trigger_kind', '') for t in pipeline_triggers])
+        trigger_types = ", ".join([t.get('trigger_kind', '') or t.get('type', '') for t in pipeline_triggers])
 
         trigger_times = []
         for t in pipeline_triggers:
