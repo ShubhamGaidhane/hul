@@ -299,9 +299,11 @@ def main():
     tenant_id = "f66fae02-5d36-495b-bfe0-78a6ff9f8e6e"
     client_id = "370843d2-ca40-464f-86e9-005367602203"
 
-    # In Databricks environment
-    # client_secret = dbutils.secrets.get("databrickskv01", "svc-b-da-q-901994-ina-aadprincipal")
-    client_secret = os.environ.get("ADF_CLIENT_SECRET", "dummy")
+    # ✅ Fetch from Databricks secret scope
+    client_secret = dbutils.secrets.get(
+        "databrickskv01",
+        "svc-b-da-q-901994-ina-aadprincipal"
+    )
 
     subscription_id = "105cc892-0276-4b01-b5ff-426df8be49e2"
     rg_name = "bieno-da21-q-901994-rg"
@@ -316,7 +318,7 @@ def main():
 
     result = scanner.execute_full_scan(rg_name, factory_name)
 
-    output_path = "/tmp/adf_full_scan_output.json"
+    output_path = "/Volumes/bdl_processed_rnd_qa/staging/pipelinenotebookmonitoring/adf_full_scan_output.json"
 
     with open(output_path, "w") as f:
         json.dump(result, f, indent=2)
