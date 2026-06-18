@@ -33,17 +33,16 @@ def find_activities(activities):
     for activity in activities:
         found.append(activity)
 
-        # Handle nested activities in IfCondition, ForEach, Until
-        if activity.get('type') == 'IfCondition':
-            config = activity.get('config', {})
-            found.extend(find_activities(config.get('ifTrueActivities', [])))
-            found.extend(find_activities(config.get('ifFalseActivities', [])))
+        # Handle nested activities in the new 'config' structure
+        config = activity.get('config', {})
+        if config:
+            if activity.get('type') == 'IfCondition':
+                found.extend(find_activities(config.get('ifTrueActivities', [])))
+                found.extend(find_activities(config.get('ifFalseActivities', [])))
+            elif activity.get('type') in ['ForEach', 'Until']:
+                found.extend(find_activities(config.get('activities', [])))
 
-        elif activity.get('type') in ['ForEach', 'Until']:
-            config = activity.get('config', {})
-            found.extend(find_activities(config.get('activities', [])))
-
-        # Some ADF JSONs use typeProperties for nested activities
+        # Keep compatibility with old structure just in case
         tp = activity.get('typeProperties', {})
         if tp:
             if activity.get('type') == 'IfCondition':
@@ -68,7 +67,7 @@ def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict):
 
     for act in activities:
         # Linked Service from activity
-        ls_ref = act.get('linkedServiceName') or act.get('linked_service_name')
+        ls_ref = act.get('linkedServiceName')
         if ls_ref:
             if isinstance(ls_ref, dict):
                 ls_names.add(ls_ref.get('referenceName'))
@@ -76,8 +75,9 @@ def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict):
                 ls_names.add(ls_ref)
 
         # Datasets from activity (Copy activity)
-        inputs = act.get('inputs', [])
-        outputs = act.get('outputs', [])
+        # Note: inputs and outputs are now at the top level of normalized activity
+        inputs = act.get('inputs') or []
+        outputs = act.get('outputs') or []
 
         for ds_ref in inputs + outputs:
             ds_name = ds_ref.get('referenceName')
@@ -90,21 +90,24 @@ def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict):
                     if ls_name:
                         ls_names.add(ls_name)
 
-        # Copy logic (translator)
-        if act.get('type') == 'Copy':
-            tp = act.get('typeProperties', {})
-            translator = tp.get('translator')
-            if translator:
-                copy_logics.append(translator)
+                    # Delimiter from dataset
+                    d = ds_obj.get('delimiter')
+                    if d:
+                        internal_wildcards.add(d)
 
-        # Check for wildcards and delimiters in inputs/outputs parameters
-        for ds_ref in inputs + outputs:
-            ds_params = ds_ref.get('parameters', {})
-            if ds_params:
-                w = extract_wildcard(ds_params)
-                if w:
-                    for item in w.split(", "):
-                        internal_wildcards.add(item)
+                # Check for wildcards and delimiters in inputs/outputs parameters
+                ds_params = ds_ref.get('parameters', {})
+                if ds_params:
+                    w = extract_wildcard(ds_params)
+                    if w:
+                        for item in w.split(", "):
+                            internal_wildcards.add(item)
+
+        # Copy logic (translator) - Check both config and typeProperties
+        config = act.get('config', {})
+        translator = config.get('translator') or act.get('typeProperties', {}).get('translator')
+        if translator:
+            copy_logics.append(translator)
 
     return {
         "linked_services": list(filter(None, ls_names)),
@@ -148,9 +151,10 @@ def process_adf_json(json_file_path):
 
         for activity in activities:
             if activity.get('type') == 'ExecutePipeline':
-                tp = activity.get('typeProperties', {})
-                ref_name = tp.get('pipeline', {}).get('referenceName', '')
-                params = tp.get('parameters', {})
+                config = activity.get('config', {})
+                # Try new 'config' then old 'typeProperties'
+                ref_name = config.get('pipeline') or activity.get('typeProperties', {}).get('pipeline', {}).get('referenceName', '')
+                params = config.get('parameters') or activity.get('typeProperties', {}).get('parameters', {})
 
                 # -------------------------
                 # ✅ LANDED
@@ -224,11 +228,15 @@ def process_adf_json(json_file_path):
 
         trigger_times = []
         for t in pipeline_triggers:
-            sched = t.get('schedule', {})
-            if sched and 'recurrence' in sched:
-                trigger_times.append(json.dumps(sched['recurrence']))
+            t_time = t.get('trigger_time')
+            if t_time:
+                trigger_times.append(str(t_time))
             else:
-                trigger_times.append(json.dumps(sched))
+                sched = t.get('schedule', {})
+                if sched and 'recurrence' in sched:
+                    trigger_times.append(json.dumps(sched['recurrence']))
+                else:
+                    trigger_times.append(json.dumps(sched))
         trigger_time_str = ", ".join(trigger_times)
 
         results.append({

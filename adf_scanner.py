@@ -1,16 +1,91 @@
 import time
 import json
+import os
 from collections import defaultdict
 
-from azure.identity import DefaultAzureCredential
+from azure.identity import ClientSecretCredential
 from azure.mgmt.datafactory import DataFactoryManagementClient
+
+def normalize_dependencies(dep_list):
+    if not dep_list:
+        return []
+    return [d.activity for d in dep_list]
+
+
+def normalize_parameters(params):
+    if not params:
+        return {}
+    return {
+        k: {
+            "type": v.type,
+            "default": getattr(v, "default_value", None)
+        }
+        for k, v in params.items()
+    }
+
+
+def normalize_activity(act):
+
+    raw = act.serialize()
+    tp = raw.get("typeProperties", {})
+
+    base = {
+        "name": act.name,
+        "type": act.type,
+        "depends_on": normalize_dependencies(
+            getattr(act, "depends_on", None)
+        ),
+        "linkedServiceName": raw.get("linkedServiceName"), # Preserve linked service
+        "inputs": raw.get("inputs"),
+        "outputs": raw.get("outputs")
+    }
+
+    if act.type == "DatabricksNotebook":
+        base["config"] = {
+            "notebook_path": tp.get("notebookPath"),
+            "parameters": tp.get("baseParameters")
+        }
+
+    elif act.type == "ExecutePipeline":
+        base["config"] = {
+            "pipeline": tp.get("pipeline", {}).get("referenceName"),
+            "parameters": tp.get("parameters")
+        }
+
+    elif act.type == "SetVariable":
+        base["config"] = {
+            "variable": tp.get("variableName"),
+            "value": tp.get("value")
+        }
+
+    elif act.type == "IfCondition":
+        base["config"] = {
+            "expression": tp.get("expression"),
+            "ifTrueActivities": [normalize_activity(a) for a in (getattr(act, "if_true_activities", []) or [])],
+            "ifFalseActivities": [normalize_activity(a) for a in (getattr(act, "if_false_activities", []) or [])]
+        }
+
+    elif act.type in ["ForEach", "Until"]:
+        base["config"] = {
+            "activities": [normalize_activity(a) for a in (getattr(act, "activities", []) or [])]
+        }
+
+    else:
+        base["config"] = tp
+
+    return base
 
 
 class UnifiedADFScanner:
 
-    def __init__(self, subscription_id):
-        # Use Databricks managed identity / default credentials
-        self.credential = DefaultAzureCredential()
+    def __init__(self, subscription_id, tenant_id, client_id, client_secret):
+
+        # Use Service Principal authentication
+        self.credential = ClientSecretCredential(
+            tenant_id=tenant_id,
+            client_id=client_id,
+            client_secret=client_secret
+        )
 
         self.client = DataFactoryManagementClient(
             self.credential,
@@ -30,21 +105,35 @@ class UnifiedADFScanner:
     # --------------------------------------------------
     # PIPELINE SCAN
     # --------------------------------------------------
-    def collect_pipeline_insights(self, rg_name, factory_name):
+    def collect_pipeline_insights(self, rg_name, factory_name, pipeline_names=None):
         results = []
 
-        for pipe in self.client.pipelines.list_by_factory(rg_name, factory_name):
+        # ✅ If specific pipelines passed
+        if pipeline_names:
+            pipelines = []
+            for name in pipeline_names:
+                try:
+                    pipe = self.client.pipelines.get(rg_name, factory_name, name)
+                    pipelines.append(pipe)
+                except Exception as e:
+                    print(f"⚠️ Failed to fetch pipeline {name}: {e}")
+        else:
+            # ✅ Existing behavior (all pipelines)
+            pipelines = self.client.pipelines.list_by_factory(rg_name, factory_name)
+
+
+        for pipe in pipelines:
             activities = pipe.activities or []
 
             activity_details = []
             dependencies = []
 
             for act in activities:
-                activity_details.append(act.serialize())
+                activity_details.append(normalize_activity(act))
 
                 dependencies.append({
                     "activity": act.name,
-                    "depends_on": getattr(act, "depends_on", None)
+                    "depends_on": normalize_dependencies(getattr(act, "depends_on", None))
                 })
 
                 # Lineage
@@ -61,7 +150,6 @@ class UnifiedADFScanner:
                         )
 
                 if act.type == "ExecutePipeline":
-                    # For ExecutePipeline, the pipeline reference is direct on the activity object
                     if hasattr(act, "pipeline") and act.pipeline:
                         ref = act.pipeline.reference_name
                         self.lineage_map[pipe.name].append(
@@ -76,8 +164,8 @@ class UnifiedADFScanner:
                 "activity_kinds": list({a.type for a in activities}),
                 "activities_detail": activity_details,
                 "dependencies": dependencies,
-                "parameters": pipe.parameters,
-                "variables": pipe.variables,
+                "parameters": normalize_parameters(pipe.parameters),
+                "variables": list(pipe.variables.keys()) if pipe.variables else [],
                 "definition": pipe.as_dict(),
                 "captured_at": time.time()
             })
@@ -91,6 +179,11 @@ class UnifiedADFScanner:
         datasets = []
 
         for ds in self.client.datasets.list_by_factory(rg_name, factory_name):
+            # Extract delimiter for DelimitedText datasets
+            delimiter = None
+            if hasattr(ds.properties, "type_properties") and ds.properties.type_properties:
+                delimiter = getattr(ds.properties.type_properties, "column_delimiter", None)
+
             datasets.append({
                 "asset_type": "dataset",
                 "name": ds.name,
@@ -100,6 +193,7 @@ class UnifiedADFScanner:
                     if ds.properties.linked_service_name else None
                 ),
                 "schema": getattr(ds.properties, "schema", None),
+                "delimiter": delimiter,
                 "definition": ds.as_dict(),
                 "captured_at": time.time()
             })
@@ -140,13 +234,21 @@ class UnifiedADFScanner:
                     for p in trig.properties.pipelines
                 ]
 
+            type_props = getattr(trig.properties, "type_properties", {})
+            trigger_time = None
+            if trig.properties.type == "ScheduleTrigger":
+                recurrence = getattr(type_props, "recurrence", None)
+                if recurrence:
+                    trigger_time = getattr(recurrence, "start_time", None)
+
             results.append({
                 "asset_type": "trigger",
                 "name": trig.name,
                 "trigger_kind": trig.properties.type,
                 "status": trig.properties.runtime_state,
                 "linked_pipelines": pipelines,
-                "schedule": getattr(trig.properties, "type_properties", {}),
+                "schedule": type_props,
+                "trigger_time": trigger_time,
                 "definition": trig.serialize(),
                 "captured_at": time.time()
             })
@@ -160,8 +262,6 @@ class UnifiedADFScanner:
         irs = []
 
         for ir in self.client.integration_runtimes.list_by_factory(rg_name, factory_name):
-            # In list_by_factory, ir.type is the resource type (Microsoft.DataFactory/factories/integrationRuntimes)
-            # The actual IR type (Managed/Self-Hosted) is in ir.properties.type
             detail = self.client.integration_runtimes.get(rg_name, factory_name, ir.name)
 
             irs.append({
@@ -177,10 +277,11 @@ class UnifiedADFScanner:
     # --------------------------------------------------
     # FULL SCAN
     # --------------------------------------------------
-    def execute_full_scan(self, rg_name, factory_name):
+    def execute_full_scan(self, rg_name, factory_name, pipeline_names=None):
+
         print(f"Starting ADF discovery for: {factory_name}")
 
-        self.collect_pipeline_insights(rg_name, factory_name)
+        self.collect_pipeline_insights(rg_name, factory_name, pipeline_names)
         self.collect_datasets(rg_name, factory_name)
         self.collect_linked_service_info(rg_name, factory_name)
         self.collect_trigger_info(rg_name, factory_name)
@@ -191,27 +292,36 @@ class UnifiedADFScanner:
             "lineage": dict(self.lineage_map)
         }
 
-
 # --------------------------------------------------
 # ENTRY POINT (Databricks)
 # --------------------------------------------------
 def main():
-    subscription_id = "<YOUR_SUBSCRIPTION_ID>"
-    rg_name = "<YOUR_RESOURCE_GROUP>"
-    factory_name = "<YOUR_ADF_NAME>"
+    tenant_id = "f66fae02-5d36-495b-bfe0-78a6ff9f8e6e"
+    client_id = "370843d2-ca40-464f-86e9-005367602203"
 
-    scanner = UnifiedADFScanner(subscription_id)
+    # In Databricks environment
+    # client_secret = dbutils.secrets.get("databrickskv01", "svc-b-da-q-901994-ina-aadprincipal")
+    client_secret = os.environ.get("ADF_CLIENT_SECRET", "dummy")
+
+    subscription_id = "105cc892-0276-4b01-b5ff-426df8be49e2"
+    rg_name = "bieno-da21-q-901994-rg"
+    factory_name = "bieno-da21-q-901994-adf-01"
+
+    scanner = UnifiedADFScanner(
+        subscription_id,
+        tenant_id,
+        client_id,
+        client_secret
+    )
 
     result = scanner.execute_full_scan(rg_name, factory_name)
 
-    # Save to DBFS
-    output_path = "/dbfs/tmp/adf_full_scan_output.json"
+    output_path = "/tmp/adf_full_scan_output.json"
 
     with open(output_path, "w") as f:
         json.dump(result, f, indent=2)
 
-    print(f"✅ Scan completed. Output saved to {output_path}")
-
+    print(f"✅ File saved at: {output_path}")
 
 # Run
 if __name__ == "__main__":
