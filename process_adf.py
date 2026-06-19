@@ -53,26 +53,66 @@ def find_activities(activities):
 
     return found
 
-def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict):
+def filter_dataset_definition(ds):
+    if not ds or 'definition' not in ds:
+        return ds
+
+    # Copy to avoid modifying original catalog
+    new_ds = ds.copy()
+    raw_def = ds['definition']
+    if isinstance(raw_def, dict):
+        # Exclude "id", "type", "etag" from processed Dataset json
+        new_def = {k: v for k, v in raw_def.items() if k not in ["id", "type", "etag"]}
+        new_ds['definition'] = new_def
+
+    return new_ds
+
+def filter_ls_definition(ls):
+    if not ls or 'definition' not in ls:
+        return ls
+
+    new_ls = ls.copy()
+    raw_def = ls['definition']
+    if isinstance(raw_def, dict):
+        props = raw_def.get('properties', {})
+        if isinstance(props, dict):
+            # Exclude "encryptedCredential"
+            tp = props.get('typeProperties', {})
+            if isinstance(tp, dict):
+                new_tp = {k: v for k, v in tp.items() if k != "encryptedCredential"}
+                new_props = props.copy()
+                new_props['typeProperties'] = new_tp
+                new_def = raw_def.copy()
+                new_def['properties'] = new_props
+                new_ls['definition'] = new_def
+
+    return new_ls
+
+def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict, ls_dict):
     pipeline = pipelines_dict.get(pipeline_name)
     if not pipeline:
         return None
 
     activities = find_activities(pipeline.get('activities_detail', []))
 
-    ls_names = set()
+    ls_infos = []
     dataset_jsons = []
     copy_logics = []
     internal_wildcards = set()
+    seen_ls = set()
 
     for act in activities:
         # Linked Service from activity
         ls_ref = act.get('linkedServiceName')
         if ls_ref:
-            if isinstance(ls_ref, dict):
-                ls_names.add(ls_ref.get('referenceName'))
-            else:
-                ls_names.add(ls_ref)
+            ls_name = ls_ref.get('referenceName') if isinstance(ls_ref, dict) else ls_ref
+            if ls_name and ls_name not in seen_ls:
+                seen_ls.add(ls_name)
+                ls_obj = ls_dict.get(ls_name)
+                if ls_obj:
+                    ls_infos.append(filter_ls_definition(ls_obj))
+                else:
+                    ls_infos.append({"name": ls_name})
 
         # Datasets from activity
         inputs = act.get('inputs') or []
@@ -83,10 +123,19 @@ def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict):
             if ds_name:
                 ds_obj = datasets_dict.get(ds_name)
                 if ds_obj:
-                    dataset_jsons.append(ds_obj)
+                    # Filter dataset definition
+                    filtered_ds = filter_dataset_definition(ds_obj)
+                    dataset_jsons.append(filtered_ds)
+
+                    # Linked service from dataset
                     ls_name = ds_obj.get('linked_service') or ds_obj.get('linkedServiceName', {}).get('referenceName')
-                    if ls_name:
-                        ls_names.add(ls_name)
+                    if ls_name and ls_name not in seen_ls:
+                        seen_ls.add(ls_name)
+                        ls_obj = ls_dict.get(ls_name)
+                        if ls_obj:
+                            ls_infos.append(filter_ls_definition(ls_obj))
+                        else:
+                            ls_infos.append({"name": ls_name})
 
                     # Delimiter from dataset property
                     d = ds_obj.get('delimiter')
@@ -108,7 +157,7 @@ def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict):
             copy_logics.append(translator)
 
     return {
-        "linked_services": list(filter(None, ls_names)),
+        "ls_configuration": ls_infos,
         "datasets": dataset_jsons,
         "copy_logic": copy_logics,
         "wildcards": list(internal_wildcards)
@@ -124,9 +173,11 @@ def process_adf_json(json_file_path):
     catalog = data.get("catalog", {})
     pipelines_list = catalog.get("pipelines", [])
     datasets_list = catalog.get("datasets", [])
+    ls_list = catalog.get("linked_services", [])
 
     pipelines_dict = {p.get('pipeline'): p for p in pipelines_list}
     datasets_dict = {d.get('name'): d for d in datasets_list}
+    ls_dict = {l.get('name'): l for l in ls_list}
 
     triggers_list = catalog.get("triggers", [])
     triggers_by_pipeline = {}
@@ -150,6 +201,7 @@ def process_adf_json(json_file_path):
         for activity in activities:
             if activity.get('type') == 'ExecutePipeline':
                 config = activity.get('config', {})
+                # Try new 'config' then old 'typeProperties'
                 ref_name = config.get('pipeline') or activity.get('typeProperties', {}).get('pipeline', {}).get('referenceName', '')
                 params = config.get('parameters') or activity.get('typeProperties', {}).get('parameters', {})
 
@@ -177,13 +229,14 @@ def process_adf_json(json_file_path):
                         for item in w.split(", "):
                             wildcards.add(item)
 
-                    info = get_pipeline_info(ref_name, pipelines_dict, datasets_dict)
+                    info = get_pipeline_info(ref_name, pipelines_dict, datasets_dict, ls_dict)
                     if info:
+                        # Landed LS Configuration: Name + filtered properties as JSON
+                        target['ls_config'] = json.dumps(info['ls_configuration'])
+                        target['datasets'] = json.dumps(info['datasets'])
                         if target == landed_info:
-                            target['ls_config'] = ", ".join(info['linked_services'])
                             target['copy_logic'] = json.dumps(info['copy_logic'])
 
-                        target['datasets'] = json.dumps(info['datasets'])
                         for item in info.get('wildcards', []):
                             wildcards.add(item)
 
@@ -199,22 +252,28 @@ def process_adf_json(json_file_path):
 
         trigger_times = []
         for t in pipeline_triggers:
-            t_time = t.get('trigger_time')
-            if t_time:
-                trigger_times.append(str(t_time))
+            # Trigger Time: recurrence JSON if ScheduleTrigger, else full definition
+            if t.get('trigger_kind') == 'ScheduleTrigger' or t.get('type') == 'ScheduleTrigger':
+                # Try to find recurrence in definition or schedule field
+                recurrence = None
+                # Check definition structure first
+                props = t.get('definition', {}).get('properties', {})
+                if props:
+                    recurrence = props.get('typeProperties', {}).get('recurrence')
+
+                # Fallback to schedule field
+                if not recurrence:
+                    recurrence = t.get('schedule', {}).get('recurrence') or t.get('schedule')
+
+                trigger_times.append(json.dumps(recurrence))
             else:
-                sched = t.get('schedule', {})
-                if sched and 'recurrence' in sched:
-                    trigger_times.append(json.dumps(sched['recurrence']))
-                else:
-                    trigger_times.append(json.dumps(sched))
+                trigger_times.append(json.dumps(t.get('definition') or t))
+
         trigger_time_str = ", ".join(trigger_times)
 
         results.append({
             "Master Pipeline": master_pipeline,
-            "Trigger Name": trigger_names,
-            "Trigger Time": trigger_time_str,
-            "Trigger Type": trigger_types,
+
             "Landed Pipeline": landed_info.get('pipeline', ''),
             "Processed Pipeline": processed_info.get('pipeline', ''),
 
@@ -230,7 +289,10 @@ def process_adf_json(json_file_path):
 
             "processed Dataset json": processed_info.get('datasets', ''),
             "procesed wildcard": processed_info.get('wildcard', ''),
-            "processed path": processed_info.get('path', '')
+            "processed path": processed_info.get('path', ''),
+            "Trigger Name": trigger_names,
+            "Trigger Time": trigger_time_str,
+            "Trigger Type": trigger_types,
         })
 
     return results
@@ -240,7 +302,7 @@ def process_adf_json(json_file_path):
 # -----------------------------------
 def main():
     json_file = r"C:\Users\ssureshg\OneDrive - Capgemini\Documents\MY_task\HUL\discovery_agent\adf_full_scan_output_Daya.json"
-    csv_file = r"C:\Users\ssureshg\OneDrive - Capgemini\Documents\MY_task\HUL\discovery_agent\FINAL_OUTPUT_4.csv"
+    csv_file = r"C:\Users\ssureshg\OneDrive - Capgemini\Documents\MY_task\HUL\discovery_agent\FINAL_OUTPUT_11.csv"
 
     if not os.path.exists(json_file):
         print(f"File not found: {json_file}")
