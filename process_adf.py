@@ -102,8 +102,8 @@ def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict, ls_dict):
     seen_ls = set()
 
     ls_names = set()
-    source_datasets = []
-    sink_datasets = []
+    source_dataset_jsons = []
+    sink_dataset_jsons = []
     notebook_details = []
     copy_mappings = []
 
@@ -132,12 +132,20 @@ def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict, ls_dict):
         for ds_ref in inputs:
             ds_name = ds_ref.get('referenceName')
             if ds_name:
-                source_datasets.append(ds_name)
+                ds_obj = datasets_dict.get(ds_name)
+                if ds_obj:
+                    source_dataset_jsons.append(filter_dataset_definition(ds_obj))
+                else:
+                    source_dataset_jsons.append({"name": ds_name})
 
         for ds_ref in outputs:
             ds_name = ds_ref.get('referenceName')
             if ds_name:
-                sink_datasets.append(ds_name)
+                ds_obj = datasets_dict.get(ds_name)
+                if ds_obj:
+                    sink_dataset_jsons.append(filter_dataset_definition(ds_obj))
+                else:
+                    sink_dataset_jsons.append({"name": ds_name})
 
         for ds_ref in inputs + outputs:
             ds_name = ds_ref.get('referenceName')
@@ -196,8 +204,8 @@ def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict, ls_dict):
         "copy_logic": copy_logics,
         "wildcards": list(internal_wildcards),
         "ls_names": list(ls_names),
-        "source_datasets": source_datasets,
-        "sink_datasets": sink_datasets,
+        "source_datasets": source_dataset_jsons,
+        "sink_datasets": sink_dataset_jsons,
         "notebook_details": notebook_details,
         "copy_mappings": copy_mappings
     }
@@ -278,9 +286,9 @@ def process_adf_json(json_file_path):
                         target['ls_config'] = json.dumps(info['ls_configuration'])
                         target['datasets'] = json.dumps(info['datasets'])
 
-                        target['ls_names'] = ", ".join(info['ls_names'])
-                        target['source_datasets'] = ", ".join(info['source_datasets'])
-                        target['sink_datasets'] = ", ".join(info['sink_datasets'])
+                        target['ls_names'] = json.dumps(info['ls_configuration'])
+                        target['source_datasets'] = json.dumps(info['source_datasets'])
+                        target['sink_datasets'] = json.dumps(info['sink_datasets'])
                         target['notebook_details'] = json.dumps(info['notebook_details'])
 
                         if target == landed_info:
@@ -299,7 +307,13 @@ def process_adf_json(json_file_path):
         pipeline_triggers = triggers_by_pipeline.get(master_pipeline, [])
         trigger_names = ", ".join([t.get('name', '') for t in pipeline_triggers])
         trigger_types = ", ".join([t.get('trigger_kind', '') or t.get('type', '') for t in pipeline_triggers])
-        trigger_statuses = ", ".join([t.get('status', '') for t in pipeline_triggers])
+
+        trigger_statuses_list = []
+        for t in pipeline_triggers:
+            # Try 'runtimeState', then 'status', then 'state'
+            status = t.get('runtimeState') or t.get('status') or t.get('state', '')
+            trigger_statuses_list.append(status)
+        trigger_statuses = ", ".join(filter(None, trigger_statuses_list))
 
         trigger_times = []
         for t in pipeline_triggers:
@@ -323,8 +337,21 @@ def process_adf_json(json_file_path):
         trigger_time_str = ", ".join(trigger_times)
 
         # Combine Source/Sink datasets from both layers if they exist
-        all_sources = [landed_info.get('source_datasets', ''), processed_info.get('source_datasets', '')]
-        all_sinks = [landed_info.get('sink_datasets', ''), processed_info.get('sink_datasets', '')]
+        combined_sources = []
+        combined_sinks = []
+        for info_obj in [landed_info, processed_info]:
+            s_json = info_obj.get('source_datasets')
+            if s_json:
+                try:
+                    combined_sources.extend(json.loads(s_json))
+                except:
+                    pass
+            si_json = info_obj.get('sink_datasets')
+            if si_json:
+                try:
+                    combined_sinks.extend(json.loads(si_json))
+                except:
+                    pass
 
         # Combine Notebook Details (they are JSON strings of lists)
         combined_notebooks = []
@@ -359,8 +386,8 @@ def process_adf_json(json_file_path):
             # New Columns
             "Landed_LinkedService": landed_info.get('ls_names', ''),
             "Processed_LinkedService": processed_info.get('ls_names', ''),
-            "Source_Dataset": ", ".join(filter(None, all_sources)),
-            "Sink_Dataset": ", ".join(filter(None, all_sinks)),
+            "Source_Dataset": json.dumps(combined_sources) if combined_sources else '',
+            "Sink_Dataset": json.dumps(combined_sinks) if combined_sinks else '',
             "Trigger_Status": trigger_statuses,
             "RefreshType": processed_info.get('refresh_type', ''),
             "Notebook_Details": json.dumps(combined_notebooks) if combined_notebooks else '',
