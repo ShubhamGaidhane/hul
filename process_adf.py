@@ -33,17 +33,16 @@ def find_activities(activities):
     for activity in activities:
         found.append(activity)
 
-        # Handle nested activities in IfCondition, ForEach, Until
-        if activity.get('type') == 'IfCondition':
-            config = activity.get('config', {})
-            found.extend(find_activities(config.get('ifTrueActivities', [])))
-            found.extend(find_activities(config.get('ifFalseActivities', [])))
+        # Handle nested activities in the new 'config' structure
+        config = activity.get('config', {})
+        if config:
+            if activity.get('type') == 'IfCondition':
+                found.extend(find_activities(config.get('ifTrueActivities', [])))
+                found.extend(find_activities(config.get('ifFalseActivities', [])))
+            elif activity.get('type') in ['ForEach', 'Until']:
+                found.extend(find_activities(config.get('activities', [])))
 
-        elif activity.get('type') in ['ForEach', 'Until']:
-            config = activity.get('config', {})
-            found.extend(find_activities(config.get('activities', [])))
-
-        # Some ADF JSONs use typeProperties for nested activities
+        # Keep compatibility with old structure just in case
         tp = activity.get('typeProperties', {})
         if tp:
             if activity.get('type') == 'IfCondition':
@@ -54,63 +53,153 @@ def find_activities(activities):
 
     return found
 
-def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict):
+def filter_dataset_definition(ds):
+    if not ds or 'definition' not in ds:
+        return ds
+
+    # Copy to avoid modifying original catalog
+    new_ds = ds.copy()
+    raw_def = ds['definition']
+    if isinstance(raw_def, dict):
+        # Exclude "id", "type", "etag" from processed Dataset json
+        new_def = {k: v for k, v in raw_def.items() if k not in ["id", "type", "etag"]}
+        new_ds['definition'] = new_def
+
+    return new_ds
+
+def filter_ls_definition(ls):
+    if not ls or 'definition' not in ls:
+        return ls
+
+    new_ls = ls.copy()
+    raw_def = ls['definition']
+    if isinstance(raw_def, dict):
+        props = raw_def.get('properties', {})
+        if isinstance(props, dict):
+            # Exclude "encryptedCredential"
+            tp = props.get('typeProperties', {})
+            if isinstance(tp, dict):
+                new_tp = {k: v for k, v in tp.items() if k != "encryptedCredential"}
+                new_props = props.copy()
+                new_props['typeProperties'] = new_tp
+                new_def = raw_def.copy()
+                new_def['properties'] = new_props
+                new_ls['definition'] = new_def
+
+    return new_ls
+
+def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict, ls_dict):
     pipeline = pipelines_dict.get(pipeline_name)
     if not pipeline:
         return None
 
     activities = find_activities(pipeline.get('activities_detail', []))
 
-    ls_names = set()
+    ls_infos = []
     dataset_jsons = []
     copy_logics = []
     internal_wildcards = set()
+    seen_ls = set()
+
+    ls_names = set()
+    source_datasets = []
+    sink_datasets = []
+    notebook_details = []
+    copy_mappings = []
 
     for act in activities:
-        # Linked Service from activity
-        ls_ref = act.get('linkedServiceName') or act.get('linked_service_name')
-        if ls_ref:
-            if isinstance(ls_ref, dict):
-                ls_names.add(ls_ref.get('referenceName'))
-            else:
-                ls_names.add(ls_ref)
+        config = act.get('config', {})
+        tp = act.get('typeProperties', {})
 
-        # Datasets from activity (Copy activity)
-        inputs = act.get('inputs', [])
-        outputs = act.get('outputs', [])
+        # Linked Service from activity
+        ls_ref = act.get('linkedServiceName')
+        if ls_ref:
+            ls_name = ls_ref.get('referenceName') if isinstance(ls_ref, dict) else ls_ref
+            if ls_name:
+                ls_names.add(ls_name)
+                if ls_name not in seen_ls:
+                    seen_ls.add(ls_name)
+                    ls_obj = ls_dict.get(ls_name)
+                    if ls_obj:
+                        ls_infos.append(filter_ls_definition(ls_obj))
+                    else:
+                        ls_infos.append({"name": ls_name})
+
+        # Datasets from activity
+        inputs = act.get('inputs') or []
+        outputs = act.get('outputs') or []
+
+        for ds_ref in inputs:
+            ds_name = ds_ref.get('referenceName')
+            if ds_name:
+                source_datasets.append(ds_name)
+
+        for ds_ref in outputs:
+            ds_name = ds_ref.get('referenceName')
+            if ds_name:
+                sink_datasets.append(ds_name)
 
         for ds_ref in inputs + outputs:
             ds_name = ds_ref.get('referenceName')
             if ds_name:
                 ds_obj = datasets_dict.get(ds_name)
                 if ds_obj:
-                    dataset_jsons.append(ds_obj)
+                    # Filter dataset definition
+                    filtered_ds = filter_dataset_definition(ds_obj)
+                    dataset_jsons.append(filtered_ds)
+
                     # Linked service from dataset
                     ls_name = ds_obj.get('linked_service') or ds_obj.get('linkedServiceName', {}).get('referenceName')
                     if ls_name:
                         ls_names.add(ls_name)
+                        if ls_name not in seen_ls:
+                            seen_ls.add(ls_name)
+                            ls_obj = ls_dict.get(ls_name)
+                            if ls_obj:
+                                ls_infos.append(filter_ls_definition(ls_obj))
+                            else:
+                                ls_infos.append({"name": ls_name})
+
+                    # Delimiter from dataset property
+                    d = ds_obj.get('delimiter')
+                    if d:
+                        internal_wildcards.add(d)
+
+                # Delimiter/Wildcard from DatasetReference parameters
+                ds_params = ds_ref.get('parameters', {})
+                if ds_params:
+                    w = extract_wildcard(ds_params)
+                    if w:
+                        for item in w.split(", "):
+                            internal_wildcards.add(item)
 
         # Copy logic (translator)
-        if act.get('type') == 'Copy':
-            tp = act.get('typeProperties', {})
-            translator = tp.get('translator')
-            if translator:
-                copy_logics.append(translator)
+        translator = config.get('translator') or tp.get('translator')
+        if translator:
+            copy_logics.append(translator)
+            if isinstance(translator, dict) and 'mappings' in translator:
+                copy_mappings.append({"translator": translator})
 
-        # Check for wildcards and delimiters in inputs/outputs parameters
-        for ds_ref in inputs + outputs:
-            ds_params = ds_ref.get('parameters', {})
-            if ds_params:
-                w = extract_wildcard(ds_params)
-                if w:
-                    for item in w.split(", "):
-                        internal_wildcards.add(item)
+        # Notebook Details
+        if act.get('type') == 'DatabricksNotebook':
+            nb_path = config.get('notebookPath') or tp.get('notebookPath')
+            nb_params = config.get('baseParameters') or tp.get('baseParameters', {})
+            if nb_path:
+                notebook_details.append({
+                    "path": nb_path,
+                    "parameters": nb_params
+                })
 
     return {
-        "linked_services": list(filter(None, ls_names)),
+        "ls_configuration": ls_infos,
         "datasets": dataset_jsons,
         "copy_logic": copy_logics,
-        "wildcards": list(internal_wildcards)
+        "wildcards": list(internal_wildcards),
+        "ls_names": list(ls_names),
+        "source_datasets": source_datasets,
+        "sink_datasets": sink_datasets,
+        "notebook_details": notebook_details,
+        "copy_mappings": copy_mappings
     }
 
 # -----------------------------------
@@ -123,9 +212,11 @@ def process_adf_json(json_file_path):
     catalog = data.get("catalog", {})
     pipelines_list = catalog.get("pipelines", [])
     datasets_list = catalog.get("datasets", [])
+    ls_list = catalog.get("linked_services", [])
 
     pipelines_dict = {p.get('pipeline'): p for p in pipelines_list}
     datasets_dict = {d.get('name'): d for d in datasets_list}
+    ls_dict = {l.get('name'): l for l in ls_list}
 
     triggers_list = catalog.get("triggers", [])
     triggers_by_pipeline = {}
@@ -148,94 +239,106 @@ def process_adf_json(json_file_path):
 
         for activity in activities:
             if activity.get('type') == 'ExecutePipeline':
-                tp = activity.get('typeProperties', {})
-                ref_name = tp.get('pipeline', {}).get('referenceName', '')
-                params = tp.get('parameters', {})
+                config = activity.get('config', {})
+                # Try new 'config' then old 'typeProperties'
+                ref_name = config.get('pipeline') or activity.get('typeProperties', {}).get('pipeline', {}).get('referenceName', '')
+                params = config.get('parameters') or activity.get('typeProperties', {}).get('parameters', {})
 
-                # -------------------------
-                # ✅ LANDED
-                # -------------------------
+                if not ref_name:
+                    continue
+
+                target = None
                 if 'LANDED' in ref_name.upper():
-                    landed_info['pipeline'] = ref_name
-                    landed_info['variables'] = json.dumps(params)
-
-                    # ✅ path
-                    landed_info['path'] = extract_value(
-                        params.get('UDLPath')
-                        or params.get('TargetObject')
-                        or params.get('SourceObject')
-                    )
-
-                    # ✅ wildcard
-                    wildcards = set()
-                    w = extract_wildcard(params)
-                    if w:
-                        for item in w.split(", "):
-                            wildcards.add(item)
-
-                    # New Info
-                    info = get_pipeline_info(ref_name, pipelines_dict, datasets_dict)
-                    if info:
-                        landed_info['ls_config'] = ", ".join(info['linked_services'])
-                        landed_info['datasets'] = json.dumps(info['datasets'])
-                        landed_info['copy_logic'] = json.dumps(info['copy_logic'])
-                        for item in info.get('wildcards', []):
-                            wildcards.add(item)
-
-                    landed_info['wildcard'] = ", ".join(list(wildcards))
-
-                # -------------------------
-                # ✅ PROCESSED
-                # -------------------------
+                    target = landed_info
                 elif 'PROCESSED' in ref_name.upper():
-                    processed_info['pipeline'] = ref_name
-                    processed_info['variables'] = json.dumps(params)
+                    target = processed_info
 
-                    processed_info['path'] = extract_value(
+                if target is not None:
+                    target['pipeline'] = ref_name
+                    target['variables'] = json.dumps(params)
+                    target['path'] = extract_value(
                         params.get('UDLPath')
                         or params.get('TargetObject')
                         or params.get('SourceObject')
                     )
 
-                    # ✅ wildcard
+                    # RefreshType (from processed variables)
+                    if target == processed_info:
+                        target['refresh_type'] = extract_value(params.get('RefreshType'))
+
                     wildcards = set()
                     w = extract_wildcard(params)
                     if w:
                         for item in w.split(", "):
                             wildcards.add(item)
 
-                    # New Info
-                    info = get_pipeline_info(ref_name, pipelines_dict, datasets_dict)
+                    info = get_pipeline_info(ref_name, pipelines_dict, datasets_dict, ls_dict)
                     if info:
-                        processed_info['datasets'] = json.dumps(info['datasets'])
+                        # Landed LS Configuration: Name + filtered properties as JSON
+                        target['ls_config'] = json.dumps(info['ls_configuration'])
+                        target['datasets'] = json.dumps(info['datasets'])
+
+                        target['ls_names'] = ", ".join(info['ls_names'])
+                        target['source_datasets'] = ", ".join(info['source_datasets'])
+                        target['sink_datasets'] = ", ".join(info['sink_datasets'])
+                        target['notebook_details'] = json.dumps(info['notebook_details'])
+
+                        if target == landed_info:
+                            target['copy_logic'] = json.dumps(info['copy_logic'])
+                            target['copy_mappings'] = json.dumps(info['copy_mappings'])
+
                         for item in info.get('wildcards', []):
                             wildcards.add(item)
 
-                    processed_info['wildcard'] = ", ".join(list(wildcards))
+                    target['wildcard'] = ", ".join(list(wildcards))
 
-        # ✅ Only include valid mappings
         if not landed_info and not processed_info:
             continue
 
         # Triggers
         pipeline_triggers = triggers_by_pipeline.get(master_pipeline, [])
         trigger_names = ", ".join([t.get('name', '') for t in pipeline_triggers])
-        trigger_types = ", ".join([t.get('trigger_kind', '') for t in pipeline_triggers])
+        trigger_types = ", ".join([t.get('trigger_kind', '') or t.get('type', '') for t in pipeline_triggers])
+        trigger_statuses = ", ".join([t.get('status', '') for t in pipeline_triggers])
 
         trigger_times = []
         for t in pipeline_triggers:
-            sched = t.get('schedule', {})
-            if sched and 'recurrence' in sched:
-                trigger_times.append(json.dumps(sched['recurrence']))
+            # Trigger Time: recurrence JSON if ScheduleTrigger, else full definition
+            if t.get('trigger_kind') == 'ScheduleTrigger' or t.get('type') == 'ScheduleTrigger':
+                # Try to find recurrence in definition or schedule field
+                recurrence = None
+                # Check definition structure first
+                props = t.get('definition', {}).get('properties', {})
+                if props:
+                    recurrence = props.get('typeProperties', {}).get('recurrence')
+
+                # Fallback to schedule field
+                if not recurrence:
+                    recurrence = t.get('schedule', {}).get('recurrence') or t.get('schedule')
+
+                trigger_times.append(json.dumps(recurrence))
             else:
-                trigger_times.append(json.dumps(sched))
+                trigger_times.append(json.dumps(t.get('definition') or t))
+
         trigger_time_str = ", ".join(trigger_times)
+
+        # Combine Source/Sink datasets from both layers if they exist
+        all_sources = [landed_info.get('source_datasets', ''), processed_info.get('source_datasets', '')]
+        all_sinks = [landed_info.get('sink_datasets', ''), processed_info.get('sink_datasets', '')]
+
+        # Combine Notebook Details (they are JSON strings of lists)
+        combined_notebooks = []
+        for info_obj in [landed_info, processed_info]:
+            nb_json = info_obj.get('notebook_details')
+            if nb_json:
+                try:
+                    combined_notebooks.extend(json.loads(nb_json))
+                except:
+                    pass
 
         results.append({
             "Master Pipeline": master_pipeline,
-            "Trigger Name": trigger_names,
-            "Trigger Time": trigger_time_str,
-            "Trigger Type": trigger_types,
+
             "Landed Pipeline": landed_info.get('pipeline', ''),
             "Processed Pipeline": processed_info.get('pipeline', ''),
 
@@ -251,7 +354,21 @@ def process_adf_json(json_file_path):
 
             "processed Dataset json": processed_info.get('datasets', ''),
             "procesed wildcard": processed_info.get('wildcard', ''),
-            "processed path": processed_info.get('path', '')
+            "processed path": processed_info.get('path', ''),
+
+            # New Columns
+            "Landed_LinkedService": landed_info.get('ls_names', ''),
+            "Processed_LinkedService": processed_info.get('ls_names', ''),
+            "Source_Dataset": ", ".join(filter(None, all_sources)),
+            "Sink_Dataset": ", ".join(filter(None, all_sinks)),
+            "Trigger_Status": trigger_statuses,
+            "RefreshType": processed_info.get('refresh_type', ''),
+            "Notebook_Details": json.dumps(combined_notebooks) if combined_notebooks else '',
+            "Copy_Activity_Mapping": landed_info.get('copy_mappings', ''),
+
+            "Trigger Name": trigger_names,
+            "Trigger Time": trigger_time_str,
+            "Trigger Type": trigger_types,
         })
 
     return results
@@ -260,8 +377,8 @@ def process_adf_json(json_file_path):
 # ✅ ENTRY POINT
 # -----------------------------------
 def main():
-    json_file = r"C:\Users\ssureshg\OneDrive - Capgemini\Documents\MY_task\HUL\discovery_agent\adf_full_scan_output_Daya.json"
-    csv_file = r"C:\Users\ssureshg\OneDrive - Capgemini\Documents\MY_task\HUL\discovery_agent\FINAL_OUTPUT_4.csv"
+    json_file = r"C:\Users\ssureshg\OneDrive - Capgemini\Documents\MY_task\HUL\discovery_agent\adf_full_scan_output_def_daya.json"
+    csv_file = r"C:\Users\ssureshg\OneDrive - Capgemini\Documents\MY_task\HUL\discovery_agent\FINAL_OUTPUT_12.csv"
 
     if not os.path.exists(json_file):
         print(f"File not found: {json_file}")
