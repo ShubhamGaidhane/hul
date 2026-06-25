@@ -104,8 +104,13 @@ def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict, ls_dict):
     ls_names = set()
     source_dataset_jsons = []
     sink_dataset_jsons = []
+    source_ls_jsons = []
+    sink_ls_jsons = []
     notebook_details = []
     copy_mappings = []
+
+    seen_source_ls = set()
+    seen_sink_ls = set()
 
     for act in activities:
         config = act.get('config', {})
@@ -135,6 +140,16 @@ def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict, ls_dict):
                 ds_obj = datasets_dict.get(ds_name)
                 if ds_obj:
                     source_dataset_jsons.append(filter_dataset_definition(ds_obj))
+
+                    # LS from source dataset
+                    ls_name = ds_obj.get('linked_service') or ds_obj.get('linkedServiceName', {}).get('referenceName')
+                    if ls_name and ls_name not in seen_source_ls:
+                        seen_source_ls.add(ls_name)
+                        ls_obj = ls_dict.get(ls_name)
+                        if ls_obj:
+                            source_ls_jsons.append(filter_ls_definition(ls_obj))
+                        else:
+                            source_ls_jsons.append({"name": ls_name})
                 else:
                     source_dataset_jsons.append({"name": ds_name})
 
@@ -144,6 +159,16 @@ def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict, ls_dict):
                 ds_obj = datasets_dict.get(ds_name)
                 if ds_obj:
                     sink_dataset_jsons.append(filter_dataset_definition(ds_obj))
+
+                    # LS from sink dataset
+                    ls_name = ds_obj.get('linked_service') or ds_obj.get('linkedServiceName', {}).get('referenceName')
+                    if ls_name and ls_name not in seen_sink_ls:
+                        seen_sink_ls.add(ls_name)
+                        ls_obj = ls_dict.get(ls_name)
+                        if ls_obj:
+                            sink_ls_jsons.append(filter_ls_definition(ls_obj))
+                        else:
+                            sink_ls_jsons.append({"name": ls_name})
                 else:
                     sink_dataset_jsons.append({"name": ds_name})
 
@@ -206,6 +231,8 @@ def get_pipeline_info(pipeline_name, pipelines_dict, datasets_dict, ls_dict):
         "ls_names": list(ls_names),
         "source_datasets": source_dataset_jsons,
         "sink_datasets": sink_dataset_jsons,
+        "source_ls": source_ls_jsons,
+        "sink_ls": sink_ls_jsons,
         "notebook_details": notebook_details,
         "copy_mappings": copy_mappings
     }
@@ -289,6 +316,8 @@ def process_adf_json(json_file_path):
                         target['ls_names'] = json.dumps(info['ls_configuration'])
                         target['source_datasets'] = json.dumps(info['source_datasets'])
                         target['sink_datasets'] = json.dumps(info['sink_datasets'])
+                        target['source_ls'] = json.dumps(info['source_ls'])
+                        target['sink_ls'] = json.dumps(info['sink_ls'])
                         target['notebook_details'] = json.dumps(info['notebook_details'])
 
                         if target == landed_info:
@@ -393,9 +422,15 @@ def process_adf_json(json_file_path):
             "Notebook_Details": json.dumps(combined_notebooks) if combined_notebooks else '',
             "Copy_Activity_Mapping": landed_info.get('copy_mappings', ''),
 
+            "Landed_Source_LS": landed_info.get('source_ls', ''),
+            "Landed_Sink_LS": landed_info.get('sink_ls', ''),
+            "Processed_Source_LS": processed_info.get('source_ls', ''),
+            "Processed_Sink_LS": processed_info.get('sink_ls', ''),
+
             "Trigger Name": trigger_names,
             "Trigger Time": trigger_time_str,
             "Trigger Type": trigger_types,
+            "IS_HISTORY": "Yes" if "HIST" in master_pipeline.upper() or "HISTORY" in master_pipeline.upper() else "No"
         })
 
     return results
