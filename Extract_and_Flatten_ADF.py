@@ -1,7 +1,7 @@
 import json
 import time
 from collections import defaultdict
-from azure.identity import DefaultAzureCredential
+from azure.identity import DefaultAzureCredential, ClientSecretCredential
 from azure.mgmt.datafactory import DataFactoryManagementClient
 
 # -----------------------------------
@@ -332,8 +332,16 @@ def flatten_metadata(data):
 # -----------------------------------
 
 class UnifiedADFScanner:
-    def __init__(self, subscription_id):
-        self.credential = DefaultAzureCredential()
+    def __init__(self, subscription_id, tenant_id=None, client_id=None, client_secret=None):
+        if tenant_id and client_id and client_secret:
+            self.credential = ClientSecretCredential(
+                tenant_id=tenant_id,
+                client_id=client_id,
+                client_secret=client_secret
+            )
+        else:
+            self.credential = DefaultAzureCredential()
+
         self.client = DataFactoryManagementClient(self.credential, subscription_id)
         self.catalog = {"pipelines": [], "linked_services": [], "triggers": [], "datasets": [], "integration_runtimes": []}
         self.lineage_map = defaultdict(list)
@@ -406,9 +414,9 @@ class UnifiedADFScanner:
 # ✅ DATABRICKS EXECUTION
 # -----------------------------------
 
-def run_adf_scan_and_flatten(subscription_id, rg_name, factory_name):
+def run_adf_scan_and_flatten(subscription_id, rg_name, factory_name, tenant_id=None, client_id=None, client_secret=None):
     # 1. Scan
-    scanner = UnifiedADFScanner(subscription_id)
+    scanner = UnifiedADFScanner(subscription_id, tenant_id, client_id, client_secret)
     scan_result = scanner.execute_full_scan(rg_name, factory_name)
 
     # 2. Flatten
