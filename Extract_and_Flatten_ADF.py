@@ -361,11 +361,16 @@ class UnifiedADFScanner:
                 if act.type == "ExecutePipeline":
                     if hasattr(act, "pipeline") and act.pipeline:
                         self.lineage_map[pipe.name].append(("pipeline", act.pipeline.reference_name))
+
+            # Serialize parameters and variables to plain dicts to avoid JSON serialization errors
+            params = {k: v.serialize() if hasattr(v, 'serialize') else v for k, v in pipe.parameters.items()} if pipe.parameters else {}
+            vars = {k: v.serialize() if hasattr(v, 'serialize') else v for k, v in pipe.variables.items()} if pipe.variables else {}
+
             self.catalog["pipelines"].append({
                 "asset_type": "pipeline", "factory": factory_name, "pipeline": pipe.name,
                 "activity_count": len(activities), "activity_kinds": list({a.type for a in activities}),
                 "activities_detail": activity_details, "dependencies": dependencies,
-                "parameters": pipe.parameters, "variables": pipe.variables, "definition": pipe.as_dict(),
+                "parameters": params, "variables": vars, "definition": pipe.as_dict(),
                 "captured_at": time.time()
             })
 
@@ -387,10 +392,20 @@ class UnifiedADFScanner:
     def collect_trigger_info(self, rg_name, factory_name):
         for trig in self.client.triggers.list_by_factory(rg_name, factory_name):
             pipelines = [p.pipeline_reference.reference_name for p in trig.properties.pipelines] if trig.properties.pipelines else []
+
+            # Ensure schedule/properties are plain dictionaries
+            props = trig.properties
+            schedule = {}
+            if hasattr(props, 'serialize'):
+                # Azure SDK trigger properties have a serialize method
+                # Most triggers store recurrence/etc in 'type_properties'
+                serialized_props = props.serialize()
+                schedule = serialized_props.get('typeProperties', {})
+
             self.catalog["triggers"].append({
                 "asset_type": "trigger", "name": trig.name, "trigger_kind": trig.properties.type,
                 "status": trig.properties.runtime_state, "linked_pipelines": pipelines,
-                "schedule": getattr(trig.properties, "type_properties", {}), "definition": trig.serialize(), "captured_at": time.time()
+                "schedule": schedule, "definition": trig.serialize(), "captured_at": time.time()
             })
 
     def collect_integration_runtimes(self, rg_name, factory_name):
