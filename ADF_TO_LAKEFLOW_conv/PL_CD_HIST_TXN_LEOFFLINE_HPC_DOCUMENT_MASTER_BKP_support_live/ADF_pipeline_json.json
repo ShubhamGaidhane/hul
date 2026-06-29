@@ -1,0 +1,2129 @@
+[
+  {
+    "now": "2026-06-29T10:29:07.418Z",
+    "perfNow": 2092537.8999999762,
+    "diagnosticCorrelation": "0211b41f-6dee-4032-a234-9388a8bac5e3",
+    "source": "DownloadSupportFiles",
+    "environment": {
+      "productName": "adf",
+      "buildVersion": "1.0.060526.5",
+      "environmentType": 3,
+      "resourceName": "bieno-da06-b-80066-adf-cd-01",
+      "resourceRegion": "northeurope",
+      "resourceGroup": "bieno-da06-b-80066-rg",
+      "subscriptionId": "7796e2b1-1c51-4a77-accf-3c035b59a22e",
+      "sessionId": "tC7yrfeg8O0KHdgPlKVnwJ",
+      "operationId": "",
+      "gitType": "live",
+      "loggingKey": "800fe448-7bbd-4cf7-a393-619d7ed29d91"
+    },
+    "additionalInfo": {
+      "selectedResource": "PL_CD_HIST_TXN_LEOFFLINE_HPC_DOCUMENT_MASTER_BKP",
+      "selectedResourceType": "pipeline"
+    }
+  },
+  {
+    "name": "DS_ADLS_LE_OFFLINE_HPC_HIST_DOCUMENT",
+    "properties": {
+      "linkedServiceName": {
+        "referenceName": "LS_ADLS",
+        "type": "LinkedServiceReference"
+      },
+      "folder": {
+        "name": "LE_OFFLINE"
+      },
+      "annotations": [],
+      "type": "AzureBlobFSFile",
+      "structure": [
+        {
+          "name": "CompanyCode",
+          "type": "String"
+        },
+        {
+          "name": "DistributorCode",
+          "type": "String"
+        },
+        {
+          "name": "DocumentNumber",
+          "type": "String"
+        },
+        {
+          "name": "DocumentType",
+          "type": "String"
+        },
+        {
+          "name": "ProductCode",
+          "type": "String"
+        },
+        {
+          "name": "ProductType",
+          "type": "String"
+        },
+        {
+          "name": "BatchCode",
+          "type": "String"
+        },
+        {
+          "name": "DetailID",
+          "type": "String"
+        },
+        {
+          "name": "OutletCode",
+          "type": "String"
+        },
+        {
+          "name": "RouteCode",
+          "type": "String"
+        },
+        {
+          "name": "DeliverRouteCode",
+          "type": "String"
+        },
+        {
+          "name": "DocumentDate",
+          "type": "DateTime"
+        },
+        {
+          "name": "DeliverDate",
+          "type": "DateTime"
+        },
+        {
+          "name": "DeliverQuanitity",
+          "type": "Decimal"
+        },
+        {
+          "name": "GrossAmount",
+          "type": "Decimal"
+        },
+        {
+          "name": "TaxAmount",
+          "type": "Decimal"
+        },
+        {
+          "name": "DiscountAmount",
+          "type": "Decimal"
+        },
+        {
+          "name": "FreeGoodsIndicator",
+          "type": "Int32"
+        },
+        {
+          "name": "DiscountCode",
+          "type": "String"
+        },
+        {
+          "name": "ReasonCode",
+          "type": "String"
+        },
+        {
+          "name": "ReferenceDocumentNumber",
+          "type": "String"
+        },
+        {
+          "name": "iRowVersion",
+          "type": "Int64"
+        },
+        {
+          "name": "ModifyUser",
+          "type": "String"
+        },
+        {
+          "name": "ModifyDate",
+          "type": "DateTime"
+        },
+        {
+          "name": "DocumentStatus",
+          "type": "String"
+        }
+      ],
+      "typeProperties": {
+        "format": {
+          "type": "TextFormat",
+          "columnDelimiter": "|",
+          "rowDelimiter": "",
+          "quoteChar": "\"",
+          "nullValue": "",
+          "treatEmptyAsNull": true,
+          "skipLineCount": 0,
+          "firstRowAsHeader": true
+        },
+        "fileName": {
+          "value": "@{concat('Document_',item().FilePart,'.csv')}",
+          "type": "Expression"
+        },
+        "folderPath": {
+          "value": "unilever/UniversalDataLake/InternalSources/LeveredgeOffline/AWS/SQLServer/HPC/Indonesia/VDLDocument/LandedFiles/@{concat('YYYY=',formatDateTime(UTCNOW(),'yyyy'))}/@{concat('MM=',formatDateTime(UTCNOW(),'MM'))}/@{concat('DD=',formatDateTime(UTCNOW(),'dd'))}",
+          "type": "Expression"
+        }
+      }
+    },
+    "type": "Microsoft.DataFactory/factories/datasets"
+  },
+  {
+    "name": "DS_ASQL_CD_D_LE_OFFLINE_LKP",
+    "properties": {
+      "linkedServiceName": {
+        "referenceName": "LS_ASQL",
+        "type": "LinkedServiceReference"
+      },
+      "folder": {
+        "name": "LE_OFFLINE"
+      },
+      "annotations": [],
+      "type": "AzureSqlTable",
+      "typeProperties": {
+        "tableName": "[EtlLog].[Batch]"
+      }
+    },
+    "type": "Microsoft.DataFactory/factories/datasets"
+  },
+  {
+    "name": "DS_CD_LEOFFLINE_History_Control",
+    "properties": {
+      "linkedServiceName": {
+        "referenceName": "LS_ABLB",
+        "type": "LinkedServiceReference"
+      },
+      "folder": {
+        "name": "LE_OFFLINE"
+      },
+      "annotations": [],
+      "type": "AzureBlob",
+      "typeProperties": {
+        "format": {
+          "type": "JsonFormat",
+          "filePattern": "arrayOfObjects"
+        },
+        "fileName": "LEofflineHist.json",
+        "folderPath": "hrudlhist"
+      }
+    },
+    "type": "Microsoft.DataFactory/factories/datasets"
+  },
+  {
+    "name": "DS_SQL_BATCH_NEW",
+    "properties": {
+      "linkedServiceName": {
+        "referenceName": "LS_ASQL",
+        "type": "LinkedServiceReference"
+      },
+      "annotations": [],
+      "type": "AzureSqlTable",
+      "typeProperties": {
+        "tableName": "[EtlLog].[Batch]"
+      }
+    },
+    "type": "Microsoft.DataFactory/factories/datasets"
+  },
+  {
+    "name": "DS_SQL_LE_OFFLINE_HPC_DOCUMENT",
+    "properties": {
+      "linkedServiceName": {
+        "referenceName": "LS_SQL_LEOFF_HPC",
+        "type": "LinkedServiceReference"
+      },
+      "annotations": [],
+      "type": "SqlServerTable",
+      "schema": [
+        {
+          "name": "CompanyCode",
+          "type": "varchar"
+        },
+        {
+          "name": "DistributorCode",
+          "type": "varchar"
+        },
+        {
+          "name": "DocumentNumber",
+          "type": "varchar"
+        },
+        {
+          "name": "DocumentType",
+          "type": "varchar"
+        },
+        {
+          "name": "ProductCode",
+          "type": "varchar"
+        },
+        {
+          "name": "ProductType",
+          "type": "varchar"
+        },
+        {
+          "name": "BatchCode",
+          "type": "varchar"
+        },
+        {
+          "name": "DetailID",
+          "type": "varchar"
+        },
+        {
+          "name": "OutletCode",
+          "type": "varchar"
+        },
+        {
+          "name": "RouteCode",
+          "type": "varchar"
+        },
+        {
+          "name": "DeliverRouteCode",
+          "type": "varchar"
+        },
+        {
+          "name": "DocumentDate",
+          "type": "datetime",
+          "precision": 23,
+          "scale": 3
+        },
+        {
+          "name": "DeliverDate",
+          "type": "datetime",
+          "precision": 23,
+          "scale": 3
+        },
+        {
+          "name": "DeliverQuanitity",
+          "type": "decimal",
+          "precision": 32,
+          "scale": 10
+        },
+        {
+          "name": "GrossAmount",
+          "type": "decimal",
+          "precision": 18,
+          "scale": 2
+        },
+        {
+          "name": "TaxAmount",
+          "type": "decimal",
+          "precision": 18,
+          "scale": 2
+        },
+        {
+          "name": "DiscountAmount",
+          "type": "decimal",
+          "precision": 20,
+          "scale": 2
+        },
+        {
+          "name": "FreeGoodsIndicator",
+          "type": "int",
+          "precision": 10
+        },
+        {
+          "name": "DiscountCode",
+          "type": "varchar"
+        },
+        {
+          "name": "ReasonCode",
+          "type": "varchar"
+        },
+        {
+          "name": "ReferenceDocumentNumber",
+          "type": "varchar"
+        },
+        {
+          "name": "iRowVersion",
+          "type": "bigint",
+          "precision": 19
+        },
+        {
+          "name": "ModifyUser",
+          "type": "varchar"
+        },
+        {
+          "name": "ModifyDate",
+          "type": "datetime",
+          "precision": 23,
+          "scale": 3
+        },
+        {
+          "name": "DocumentStatus",
+          "type": "varchar"
+        }
+      ],
+      "typeProperties": {
+        "schema": "dbo",
+        "table": "VDL_Document"
+      }
+    },
+    "type": "Microsoft.DataFactory/factories/datasets"
+  },
+  {
+    "name": "dfgw-aws-01",
+    "properties": {
+      "type": "SelfHosted",
+      "description": "AWS IR",
+      "typeProperties": {
+        "linkedInfo": {
+          "resourceId": "/subscriptions/8e017cde-1d7c-4842-a4a5-18f6c115cae3/resourcegroups/bieno-da08-d-56731-rg/providers/Microsoft.DataFactory/factories/bieno-da08-d-56731-adf-01/integrationruntimes/dfgw-master-aws-01",
+          "authorizationType": "Rbac"
+        }
+      }
+    }
+  },
+  {
+    "name": "LS_ABLB",
+    "type": "Microsoft.DataFactory/factories/linkedservices",
+    "properties": {
+      "description": "Connect to Blob",
+      "annotations": [],
+      "type": "AzureBlobStorage",
+      "typeProperties": {
+        "serviceEndpoint": "https://dbstorageda06b80066.blob.core.windows.net/",
+        "tenant": "f66fae02-5d36-495b-bfe0-78a6ff9f8e6e",
+        "servicePrincipalId": "3a04829e-e5ba-498d-805d-450972cabd11",
+        "servicePrincipalKey": {
+          "type": "AzureKeyVaultSecret",
+          "store": {
+            "referenceName": "LS_KV_LOCAL",
+            "type": "LinkedServiceReference"
+          },
+          "secretName": "svc-b-da-b-80066-ina-aadprincipal"
+        },
+        "accountKind": "StorageV2"
+      }
+    }
+  },
+  {
+    "name": "LS_ADB_XL",
+    "type": "Microsoft.DataFactory/factories/linkedservices",
+    "properties": {
+      "description": "LS_ADB_XL",
+      "annotations": [],
+      "type": "AzureDatabricks",
+      "typeProperties": {
+        "domain": "https://northeurope.azuredatabricks.net",
+        "authentication": "MSI",
+        "workspaceResourceId": "/subscriptions/7796e2b1-1c51-4a77-accf-3c035b59a22e/resourceGroups/bieno-da06-b-80066-rg/providers/Microsoft.Databricks/workspaces/bieno-da06-b-80066-adb-cd",
+        "newClusterNodeType": "Standard_DS5_v2",
+        "newClusterNumOfWorker": "1:12",
+        "newClusterSparkEnvVars": {
+          "PYSPARK_PYTHON": "/databricks/python3/bin/python3"
+        },
+        "newClusterVersion": "10.4.x-scala2.12",
+        "newClusterLogDestination": "dbfs:/mnt/workspace-531763200430154/",
+        "clusterOption": "Autoscaling",
+        "newClusterInitScripts": []
+      }
+    }
+  },
+  {
+    "name": "LS_ADLS",
+    "type": "Microsoft.DataFactory/factories/linkedservices",
+    "properties": {
+      "annotations": [],
+      "type": "AzureBlobFS",
+      "typeProperties": {
+        "url": "https://dbstorageda06b80066adls.dfs.core.windows.net",
+        "tenant": "f66fae02-5d36-495b-bfe0-78a6ff9f8e6e",
+        "servicePrincipalId": "3a04829e-e5ba-498d-805d-450972cabd11",
+        "servicePrincipalKey": {
+          "type": "AzureKeyVaultSecret",
+          "store": {
+            "referenceName": "LS_KV_LOCAL",
+            "type": "LinkedServiceReference"
+          },
+          "secretName": "svc-b-da-b-80066-ina-aadprincipal"
+        }
+      }
+    }
+  },
+  {
+    "name": "LS_ASQL",
+    "type": "Microsoft.DataFactory/factories/linkedservices",
+    "properties": {
+      "annotations": [],
+      "type": "AzureSqlDatabase",
+      "typeProperties": {
+        "connectionString": {
+          "type": "AzureKeyVaultSecret",
+          "store": {
+            "referenceName": "LS_KV_LOCAL",
+            "type": "LinkedServiceReference"
+          },
+          "secretName": "mcsConnectionString"
+        }
+      }
+    }
+  },
+  {
+    "name": "LS_KV_LOCAL",
+    "type": "Microsoft.DataFactory/factories/linkedservices",
+    "properties": {
+      "annotations": [],
+      "type": "AzureKeyVault",
+      "typeProperties": {
+        "baseUrl": "https://bieno-da06-b-80066-kv-01.vault.azure.net/"
+      }
+    }
+  },
+  {
+    "name": "LS_SQL_LEOFF_HPC",
+    "type": "Microsoft.DataFactory/factories/linkedservices",
+    "properties": {
+      "annotations": [],
+      "type": "SqlServer",
+      "typeProperties": {
+        "connectionString": "Integrated Security=False;Data Source=bnldmuw200016,1635;Initial Catalog=Centegy_SnDPro_UID_HPC;User ID=UDLPOC;applicationintent=readonly",
+        "password": {
+          "type": "AzureKeyVaultSecret",
+          "store": {
+            "referenceName": "LS_KV_LOCAL",
+            "type": "LinkedServiceReference"
+          },
+          "secretName": "CD-LEOFFLINE-INDS-DBPswd-HPC"
+        }
+      },
+      "connectVia": {
+        "referenceName": "dfgw-aws-01",
+        "type": "IntegrationRuntimeReference"
+      }
+    }
+  },
+  {
+    "name": "PL_CD_HIST_TXN_LEOFFLINE_HPC_DOCUMENT_ADLSTOADLS_PROCESSED",
+    "properties": {
+      "activities": [
+        {
+          "name": "AT_LKP_InsertBatchDetails",
+          "type": "Lookup",
+          "dependsOn": [],
+          "policy": {
+            "timeout": "7.00:00:00",
+            "retry": 0,
+            "retryIntervalInSeconds": 30,
+            "secureOutput": false
+          },
+          "userProperties": [],
+          "typeProperties": {
+            "source": {
+              "type": "SqlSource",
+              "sqlReaderStoredProcedureName": "[EtlLog].[uspBatchDetailStartLog]",
+              "storedProcedureParameters": {
+                "JobName": {
+                  "type": "String",
+                  "value": {
+                    "value": "@pipeline().Pipeline",
+                    "type": "Expression"
+                  }
+                },
+                "ParentBatchID": {
+                  "type": "Int32",
+                  "value": {
+                    "value": "@pipeline().parameters.ParentBatchId",
+                    "type": "Expression"
+                  }
+                },
+                "RunID": {
+                  "type": "Guid",
+                  "value": {
+                    "value": "@pipeline().RunId",
+                    "type": "Expression"
+                  }
+                },
+                "ToBeResume": {
+                  "type": "Boolean",
+                  "value": {
+                    "value": "@pipeline().parameters.ToBeResumed",
+                    "type": "Expression"
+                  }
+                }
+              },
+              "partitionOption": "None"
+            },
+            "dataset": {
+              "referenceName": "DS_SQL_BATCH_NEW",
+              "type": "DatasetReference"
+            }
+          }
+        },
+        {
+          "name": "AT_IF_ExecCheckProcessed",
+          "type": "IfCondition",
+          "dependsOn": [
+            {
+              "activity": "AT_LKP_InsertBatchDetails",
+              "dependencyConditions": [
+                "Succeeded"
+              ]
+            }
+          ],
+          "userProperties": [],
+          "typeProperties": {
+            "expression": {
+              "value": "@bool(activity('AT_LKP_InsertBatchDetails').output.firstRow.ToBeRun)",
+              "type": "Expression"
+            },
+            "ifTrueActivities": [
+              {
+                "name": "AT_SP_StartExecutionLog",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "storedProcedureName": "[EtlLog].[uspExecutionStartLog]",
+                  "storedProcedureParameters": {
+                    "ActivityID": {
+                      "value": {
+                        "value": "@guid()",
+                        "type": "Expression"
+                      },
+                      "type": "Guid"
+                    },
+                    "ActivityName": {
+                      "value": "AT_ADB_CD_LEOFFLINE_HPC_DOCUMENT_PROCESSED",
+                      "type": "String"
+                    },
+                    "BatchDetailID": {
+                      "value": {
+                        "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    }
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ASQL",
+                  "type": "LinkedServiceReference"
+                }
+              },
+              {
+                "name": "AT_SP_EndExecutionLog_Success",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                  {
+                    "activity": "AT_ADB_CD_LEOFFLINE_HPC_DOCUMENT_PROCESSED",
+                    "dependencyConditions": [
+                      "Succeeded"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "storedProcedureName": "[EtlLog].[uspExecutionEndLogV1]",
+                  "storedProcedureParameters": {
+                    "ActivityName": {
+                      "value": "AT_ADB_CD_LEOFFLINE_HPC_DOCUMENT_PROCESSED",
+                      "type": "String"
+                    },
+                    "BatchDetailID": {
+                      "value": {
+                        "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "RulesApplied": {
+                      "value": "false",
+                      "type": "Boolean"
+                    },
+                    "SourceName": {
+                      "value": "CD_LE_OFFLINE",
+                      "type": "String"
+                    },
+                    "SourceObject": {
+                      "value": {
+                        "value": "@concat('unilever/UniversalDataLake/InternalSources/LeveredgeOffline/AWS/SQLServer/HPC/Indonesia/VDLDocument/LandedFiles/YYYY=',formatDateTime(utcnow(),'yyyy'),'/MM=',formatDateTime(utcnow(),'MM'),'/DD=',formatDateTime(utcnow(),'dd'))",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "Status": {
+                      "value": "Succeeded",
+                      "type": "String"
+                    },
+                    "TargetObject": {
+                      "value": {
+                        "value": "@concat('unilever/UniversalDataLake/InternalSources/LeveredgeOffline/AWS/SQLServer/HPC/Indonesia/VDLDocument/Processed/YYYY=',formatDateTime(utcnow(),'yyyy'),'/MM=',formatDateTime(utcnow(),'MM'),'/DD=',formatDateTime(utcnow(),'dd'))",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "SourceRowCount": {
+                      "value": {
+                        "value": "@first(split(activity('AT_ADB_CD_LEOFFLINE_HPC_DOCUMENT_PROCESSED').output.runOutput,','))",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "TargetRowCount": {
+                      "value": {
+                        "value": "@last(take(split(activity('AT_ADB_CD_LEOFFLINE_HPC_DOCUMENT_PROCESSED').output.runOutput,','),2))",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "ErrorRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    }
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ASQL",
+                  "type": "LinkedServiceReference"
+                }
+              },
+              {
+                "name": "AT_SP_EndExecutionLog_Failure",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                  {
+                    "activity": "AT_ADB_CD_LEOFFLINE_HPC_DOCUMENT_PROCESSED",
+                    "dependencyConditions": [
+                      "Failed"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "storedProcedureName": "[EtlLog].[uspExecutionEndLogV1]",
+                  "storedProcedureParameters": {
+                    "ActivityName": {
+                      "value": "AT_ADB_CD_LEOFFLINE_HPC_DOCUMENT_PROCESSED",
+                      "type": "String"
+                    },
+                    "BatchDetailID": {
+                      "value": {
+                        "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "RulesApplied": {
+                      "value": "false",
+                      "type": "Boolean"
+                    },
+                    "SourceName": {
+                      "value": "CD_LE_OFFLINE",
+                      "type": "String"
+                    },
+                    "SourceObject": {
+                      "value": {
+                        "value": "@concat('unilever/UniversalDataLake/InternalSources/LeveredgeOffline/AWS/SQLServer/HPC/Indonesia/VDLDocument/LandedFiles/YYYY=',formatDateTime(utcnow(),'yyyy'),'/MM=',formatDateTime(utcnow(),'MM'),'/DD=',formatDateTime(utcnow(),'dd'))",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "Status": {
+                      "value": "Failure",
+                      "type": "String"
+                    },
+                    "TargetObject": {
+                      "value": {
+                        "value": "@concat('unilever/UniversalDataLake/InternalSources/LeveredgeOffline/AWS/SQLServer/HPC/Indonesia/VDLDocument/Processed/YYYY=',formatDateTime(utcnow(),'yyyy'),'/MM=',formatDateTime(utcnow(),'MM'),'/DD=',formatDateTime(utcnow(),'dd'))",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "SourceRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "TargetRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "ErrorRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    }
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ASQL",
+                  "type": "LinkedServiceReference"
+                }
+              },
+              {
+                "name": "AT_SP_EndExecutionErrorLog",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                  {
+                    "activity": "AT_SP_EndExecutionLog_Failure",
+                    "dependencyConditions": [
+                      "Succeeded"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "storedProcedureName": "[EtlLog].[uspExecutionErrorLog]",
+                  "storedProcedureParameters": {
+                    "ActivityName": {
+                      "value": "AT_ADB_CD_LEOFFLINE_HPC_DOCUMENT_PROCESSED",
+                      "type": "String"
+                    },
+                    "BatchDetailID": {
+                      "value": {
+                        "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "DetailedErrorLocation": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "ErrorMessage": {
+                      "value": {
+                        "value": "@activity('AT_ADB_CD_LEOFFLINE_HPC_DOCUMENT_PROCESSED').Error.message",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "JobType": {
+                      "value": "ADB",
+                      "type": "String"
+                    }
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ASQL",
+                  "type": "LinkedServiceReference"
+                }
+              },
+              {
+                "name": "AT_ADB_CD_LEOFFLINE_HPC_DOCUMENT_PROCESSED",
+                "type": "DatabricksNotebook",
+                "dependsOn": [
+                  {
+                    "activity": "AT_SP_StartExecutionLog",
+                    "dependencyConditions": [
+                      "Succeeded"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false,
+                  "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "notebookPath": "/Shared/Universal Data Lake/CD/LEOFFLINE/NTBK_CD_TXN_LEOFFLINE_HIST",
+                  "baseParameters": {
+                    "day": {
+                      "value": "@{formatDateTime(UTCNOW(),'dd')}",
+                      "type": "Expression"
+                    },
+                    "month": {
+                      "value": "@{formatDateTime(UTCNOW(),'MM')}",
+                      "type": "Expression"
+                    },
+                    "year": {
+                      "value": "@{formatDateTime(UTCNOW(),'yyyy')}",
+                      "type": "Expression"
+                    },
+                    "firstloadloc": "unilever/UniversalDataLake/InternalSources/LeveredgeOffline/AWS/SQLServer/HPC/Indonesia/VDLDocument/LandedFiles",
+                    "outputlocation": "unilever/UniversalDataLake/InternalSources/LeveredgeOffline/AWS/SQLServer/HPC/Indonesia/VDLDocument/Processed",
+                    "primarykeys": "CompanyCode,DistributorCode,DocumentNumber,ProductCode,DetailID",
+                    "sourceDataObject": "HPCDocument",
+                    "RetentionMonths": "36"
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ADB_XL",
+                  "type": "LinkedServiceReference"
+                }
+              },
+              {
+                "name": "LKP_Update_RowCount_DataSetControl",
+                "type": "Lookup",
+                "dependsOn": [
+                  {
+                    "activity": "AT_SP_EndExecutionLog_Success",
+                    "dependencyConditions": [
+                      "Succeeded"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false,
+                  "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "source": {
+                    "type": "AzureSqlSource",
+                    "sqlReaderQuery": {
+                      "value": "update CTL.LEOfflineControl set IROWVERSION = @{last(split(activity('AT_ADB_CD_LEOFFLINE_HPC_DOCUMENT_PROCESSED').output.runOutput,','))} where DBNAME='Centegy_SnDPro_UID_HPC' and VIEWNAME='VDL_Document'\n\nselect * from CTL.LEOfflineControl",
+                      "type": "Expression"
+                    },
+                    "queryTimeout": "02:00:00",
+                    "partitionOption": "None"
+                  },
+                  "dataset": {
+                    "referenceName": "DS_ASQL_CD_D_LE_OFFLINE_LKP",
+                    "type": "DatasetReference"
+                  },
+                  "firstRowOnly": false
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "AT_SP_EndBatchDetails",
+          "type": "SqlServerStoredProcedure",
+          "dependsOn": [
+            {
+              "activity": "AT_IF_ExecCheckProcessed",
+              "dependencyConditions": [
+                "Completed"
+              ]
+            }
+          ],
+          "policy": {
+            "timeout": "7.00:00:00",
+            "retry": 0,
+            "retryIntervalInSeconds": 30,
+            "secureOutput": false
+          },
+          "userProperties": [],
+          "typeProperties": {
+            "storedProcedureName": "[EtlLog].[uspBatchDetailEndLog]",
+            "storedProcedureParameters": {
+              "BatchDetailID": {
+                "value": {
+                  "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                  "type": "Expression"
+                },
+                "type": "Int32"
+              }
+            }
+          },
+          "linkedServiceName": {
+            "referenceName": "LS_ASQL",
+            "type": "LinkedServiceReference"
+          }
+        }
+      ],
+      "parameters": {
+        "SliceStartTime": {
+          "type": "String",
+          "defaultValue": "2018-01-01"
+        },
+        "CustomSliceStart": {
+          "type": "Bool",
+          "defaultValue": false
+        },
+        "ToBeResumed": {
+          "type": "Bool",
+          "defaultValue": false
+        },
+        "ParentBatchId": {
+          "type": "Int",
+          "defaultValue": 1
+        },
+        "LoadType": {
+          "type": "String",
+          "defaultValue": "Incremental"
+        },
+        "PreviousSliceDateTime": {
+          "type": "String",
+          "defaultValue": "2018-01-02"
+        },
+        "sp_null": {
+          "type": "string"
+        },
+        "ADB_NB_PATH": {
+          "type": "string",
+          "defaultValue": "/Shared/Universal Data Lake/CD/LEOFFLINE/NTBK_CD_TXN_LEOFFLINE"
+        }
+      },
+      "folder": {
+        "name": "LE_OFFLINE"
+      },
+      "annotations": [],
+      "lastPublishTime": "2023-04-07T10:17:01Z"
+    },
+    "type": "Microsoft.DataFactory/factories/pipelines"
+  },
+  {
+    "name": "PL_CD_HIST_TXN_LEOFFLINE_HPC_DOCUMENT_MASTER_BKP",
+    "properties": {
+      "activities": [
+        {
+          "name": "AT_LKP_InsertBatch",
+          "type": "Lookup",
+          "dependsOn": [],
+          "policy": {
+            "timeout": "7.00:00:00",
+            "retry": 0,
+            "retryIntervalInSeconds": 30,
+            "secureOutput": false,
+            "secureInput": false
+          },
+          "userProperties": [],
+          "typeProperties": {
+            "source": {
+              "type": "SqlSource",
+              "sqlReaderStoredProcedureName": "[EtlLog].[uspBatchStartLog]",
+              "storedProcedureParameters": {
+                "JobName": {
+                  "type": "String",
+                  "value": {
+                    "value": "@pipeline().Pipeline",
+                    "type": "Expression"
+                  }
+                },
+                "RunID": {
+                  "type": "Guid",
+                  "value": {
+                    "value": "@pipeline().RunId",
+                    "type": "Expression"
+                  }
+                },
+                "SliceDateTime": {
+                  "type": "DateTime",
+                  "value": {
+                    "value": "@if(pipeline().parameters.CustomSliceStart, pipeline().parameters.SliceStartTime, pipeline().TriggerTime)",
+                    "type": "Expression"
+                  }
+                },
+                "ToBeResume": {
+                  "type": "Boolean",
+                  "value": {
+                    "value": "@pipeline().parameters.ToBeResumed",
+                    "type": "Expression"
+                  }
+                }
+              },
+              "partitionOption": "None"
+            },
+            "dataset": {
+              "referenceName": "DS_SQL_BATCH_NEW",
+              "type": "DatasetReference"
+            }
+          }
+        },
+        {
+          "name": "AT_IF_ExecCheckMaster",
+          "type": "IfCondition",
+          "dependsOn": [
+            {
+              "activity": "AT_LKP_InsertBatch",
+              "dependencyConditions": [
+                "Succeeded"
+              ]
+            }
+          ],
+          "userProperties": [],
+          "typeProperties": {
+            "expression": {
+              "value": "@bool(activity('AT_LKP_InsertBatch').output.firstRow.ToBeRun)",
+              "type": "Expression"
+            },
+            "ifTrueActivities": [
+              {
+                "name": "AT_EXEP_CD_LEOFF_HPC_DOCUMENT_PROCESSED",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                  {
+                    "activity": "AT_EXEP_CD_LEOFF_HPC_DOCUMENT_LANDED",
+                    "dependencyConditions": [
+                      "Succeeded"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "pipeline": {
+                    "referenceName": "PL_CD_HIST_TXN_LEOFFLINE_HPC_DOCUMENT_ADLSTOADLS_PROCESSED",
+                    "type": "PipelineReference"
+                  },
+                  "waitOnCompletion": true,
+                  "parameters": {
+                    "SliceStartTime": {
+                      "value": "@pipeline().parameters.SliceStartTime",
+                      "type": "Expression"
+                    },
+                    "CustomSliceStart": {
+                      "value": "@pipeline().parameters.CustomSliceStart",
+                      "type": "Expression"
+                    },
+                    "ToBeResumed": {
+                      "value": "@pipeline().parameters.ToBeResumed",
+                      "type": "Expression"
+                    },
+                    "ParentBatchId": {
+                      "value": "@activity('AT_LKP_InsertBatch').output.firstRow.BatchID",
+                      "type": "Expression"
+                    },
+                    "LoadType": {
+                      "value": "@pipeline().parameters.LoadType",
+                      "type": "Expression"
+                    },
+                    "PreviousSliceDateTime": {
+                      "value": "@activity('AT_LKP_InsertBatch').output.firstRow.PreviousSliceDateTime",
+                      "type": "Expression"
+                    },
+                    "sp_null": {
+                      "value": "@pipeline().parameters.sp_null",
+                      "type": "Expression"
+                    },
+                    "ADB_NB_PATH": {
+                      "value": "@pipeline().parameters.ADB_NB_PATH",
+                      "type": "Expression"
+                    }
+                  }
+                }
+              },
+              {
+                "name": "AT_EXEP_CD_LEOFF_HPC_DOCUMENT_LANDED",
+                "type": "ExecutePipeline",
+                "dependsOn": [],
+                "policy": {
+                  "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "pipeline": {
+                    "referenceName": "PL_CD_HIST_TXN_LEOFFLINE_HPC_DOCUMENT_SQLTOADLS_LANDED_BKP",
+                    "type": "PipelineReference"
+                  },
+                  "waitOnCompletion": true,
+                  "parameters": {
+                    "SliceStartTime": {
+                      "value": "@pipeline().parameters.SliceStartTime",
+                      "type": "Expression"
+                    },
+                    "CustomSliceStart": {
+                      "value": "@pipeline().parameters.CustomSliceStart",
+                      "type": "Expression"
+                    },
+                    "ToBeResumed": {
+                      "value": "@pipeline().parameters.ToBeResumed",
+                      "type": "Expression"
+                    },
+                    "ParentBatchId": {
+                      "value": "@activity('AT_LKP_InsertBatch').output.firstRow.BatchID",
+                      "type": "Expression"
+                    },
+                    "LoadType": {
+                      "value": "@pipeline().parameters.LoadType",
+                      "type": "Expression"
+                    },
+                    "PreviousSliceDateTime": {
+                      "value": "@activity('AT_LKP_InsertBatch').output.firstRow.PreviousSliceDateTime",
+                      "type": "Expression"
+                    },
+                    "sp_null": {
+                      "value": "@pipeline().parameters.sp_null",
+                      "type": "Expression"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "AT_SP_EndBatch",
+          "type": "SqlServerStoredProcedure",
+          "dependsOn": [
+            {
+              "activity": "AT_IF_ExecCheckMaster",
+              "dependencyConditions": [
+                "Succeeded"
+              ]
+            }
+          ],
+          "policy": {
+            "timeout": "7.00:00:00",
+            "retry": 0,
+            "retryIntervalInSeconds": 30,
+            "secureOutput": false,
+            "secureInput": false
+          },
+          "userProperties": [],
+          "typeProperties": {
+            "storedProcedureName": "[EtlLog].[uspBatchEndLog]",
+            "storedProcedureParameters": {
+              "BatchID": {
+                "value": {
+                  "value": "@activity('AT_LKP_InsertBatch').output.firstRow.BatchID",
+                  "type": "Expression"
+                },
+                "type": "Int32"
+              }
+            }
+          },
+          "linkedServiceName": {
+            "referenceName": "LS_ASQL",
+            "type": "LinkedServiceReference"
+          }
+        }
+      ],
+      "parameters": {
+        "SliceStartTime": {
+          "type": "String",
+          "defaultValue": "2018-01-01"
+        },
+        "CustomSliceStart": {
+          "type": "Bool",
+          "defaultValue": false
+        },
+        "ToBeResumed": {
+          "type": "Bool",
+          "defaultValue": false
+        },
+        "LoadType": {
+          "type": "String",
+          "defaultValue": "Incremental"
+        },
+        "sp_null": {
+          "type": "String"
+        },
+        "ADB_NB_PATH": {
+          "type": "string",
+          "defaultValue": "/Shared/Universal Data Lake/CD/LEOFFLINE/NTBK_CD_TXN_LEOFFLINE"
+        }
+      },
+      "folder": {
+        "name": "LE_OFFLINE"
+      },
+      "annotations": [],
+      "lastPublishTime": "2023-04-07T10:29:15Z"
+    },
+    "type": "Microsoft.DataFactory/factories/pipelines"
+  },
+  {
+    "name": "PL_CD_HIST_TXN_LEOFFLINE_HPC_DOCUMENT_SQLTOADLS_LANDED_BKP",
+    "properties": {
+      "activities": [
+        {
+          "name": "AT_LKP_InsertBatchDetails",
+          "type": "Lookup",
+          "dependsOn": [],
+          "policy": {
+            "timeout": "7.00:00:00",
+            "retry": 0,
+            "retryIntervalInSeconds": 30,
+            "secureOutput": false
+          },
+          "userProperties": [],
+          "typeProperties": {
+            "source": {
+              "type": "SqlSource",
+              "sqlReaderStoredProcedureName": "[EtlLog].[uspBatchDetailStartLog]",
+              "storedProcedureParameters": {
+                "JobName": {
+                  "type": "String",
+                  "value": {
+                    "value": "@pipeline().Pipeline",
+                    "type": "Expression"
+                  }
+                },
+                "ParentBatchID": {
+                  "type": "Int32",
+                  "value": {
+                    "value": "@pipeline().parameters.ParentBatchId",
+                    "type": "Expression"
+                  }
+                },
+                "RunID": {
+                  "type": "Guid",
+                  "value": {
+                    "value": "@pipeline().RunId",
+                    "type": "Expression"
+                  }
+                },
+                "ToBeResume": {
+                  "type": "Boolean",
+                  "value": {
+                    "value": "@pipeline().parameters.ToBeResumed",
+                    "type": "Expression"
+                  }
+                }
+              },
+              "partitionOption": "None"
+            },
+            "dataset": {
+              "referenceName": "DS_SQL_BATCH_NEW",
+              "type": "DatasetReference"
+            }
+          }
+        },
+        {
+          "name": "AT_IF_ExecCheckLanded",
+          "type": "IfCondition",
+          "dependsOn": [
+            {
+              "activity": "AT_LKP_InsertBatchDetails",
+              "dependencyConditions": [
+                "Succeeded"
+              ]
+            }
+          ],
+          "userProperties": [],
+          "typeProperties": {
+            "expression": {
+              "value": "@bool(activity('AT_LKP_InsertBatchDetails').output.firstRow.ToBeRun)",
+              "type": "Expression"
+            },
+            "ifTrueActivities": [
+              {
+                "name": "AT_PL_EXEC_LEOFFLINE_HPC_DOCUMENT_LANDED_COPY",
+                "type": "ExecutePipeline",
+                "dependsOn": [],
+                "policy": {
+                  "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "pipeline": {
+                    "referenceName": "PL_CD_HIST_TXN_LEOFFLINE_HPC_DOCUMENT_SQLTOADLS_LANDED_COPY",
+                    "type": "PipelineReference"
+                  },
+                  "waitOnCompletion": true,
+                  "parameters": {
+                    "SliceStartTime": {
+                      "value": "@pipeline().parameters.SliceStartTime",
+                      "type": "Expression"
+                    },
+                    "CustomSliceStart": {
+                      "value": "@pipeline().parameters.CustomSliceStart",
+                      "type": "Expression"
+                    },
+                    "ToBeResumed": {
+                      "value": "@pipeline().parameters.ToBeResumed",
+                      "type": "Expression"
+                    },
+                    "ParentBatchId": {
+                      "value": "@pipeline().parameters.ParentBatchId",
+                      "type": "Expression"
+                    },
+                    "LoadType": {
+                      "value": "@pipeline().parameters.LoadType",
+                      "type": "Expression"
+                    },
+                    "PreviousSliceDateTime": {
+                      "value": "@pipeline().parameters.PreviousSliceDateTime",
+                      "type": "Expression"
+                    },
+                    "BatchDetailID": {
+                      "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                      "type": "Expression"
+                    },
+                    "sp_null": {
+                      "value": "@pipeline().parameters.sp_null",
+                      "type": "Expression"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "AT_SP_EndBatchDetails",
+          "type": "SqlServerStoredProcedure",
+          "dependsOn": [
+            {
+              "activity": "AT_IF_ExecCheckLanded",
+              "dependencyConditions": [
+                "Completed"
+              ]
+            }
+          ],
+          "policy": {
+            "timeout": "7.00:00:00",
+            "retry": 0,
+            "retryIntervalInSeconds": 30,
+            "secureOutput": false
+          },
+          "userProperties": [],
+          "typeProperties": {
+            "storedProcedureName": "[EtlLog].[uspBatchDetailEndLog]",
+            "storedProcedureParameters": {
+              "BatchDetailID": {
+                "value": {
+                  "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                  "type": "Expression"
+                },
+                "type": "Int32"
+              }
+            }
+          },
+          "linkedServiceName": {
+            "referenceName": "LS_ASQL",
+            "type": "LinkedServiceReference"
+          }
+        }
+      ],
+      "parameters": {
+        "SliceStartTime": {
+          "type": "String",
+          "defaultValue": "2018-01-01"
+        },
+        "CustomSliceStart": {
+          "type": "Bool",
+          "defaultValue": false
+        },
+        "ToBeResumed": {
+          "type": "Bool",
+          "defaultValue": false
+        },
+        "ParentBatchId": {
+          "type": "Int",
+          "defaultValue": 1
+        },
+        "LoadType": {
+          "type": "String",
+          "defaultValue": "Incremental"
+        },
+        "PreviousSliceDateTime": {
+          "type": "String",
+          "defaultValue": "2018-01-02"
+        },
+        "sp_null": {
+          "type": "string"
+        }
+      },
+      "folder": {
+        "name": "LE_OFFLINE"
+      },
+      "annotations": [],
+      "lastPublishTime": "2023-04-07T10:26:02Z"
+    },
+    "type": "Microsoft.DataFactory/factories/pipelines"
+  },
+  {
+    "name": "PL_CD_HIST_TXN_LEOFFLINE_HPC_DOCUMENT_SQLTOADLS_LANDED_COPY",
+    "properties": {
+      "activities": [
+        {
+          "name": "AT_LKP_BLOB_HIST",
+          "type": "Lookup",
+          "dependsOn": [],
+          "policy": {
+            "timeout": "7.00:00:00",
+            "retry": 0,
+            "retryIntervalInSeconds": 30,
+            "secureOutput": false,
+            "secureInput": false
+          },
+          "userProperties": [],
+          "typeProperties": {
+            "source": {
+              "type": "BlobSource",
+              "recursive": true
+            },
+            "dataset": {
+              "referenceName": "DS_CD_LEOFFLINE_History_Control",
+              "type": "DatasetReference"
+            },
+            "firstRowOnly": false
+          }
+        },
+        {
+          "name": "ForEach1",
+          "type": "ForEach",
+          "dependsOn": [
+            {
+              "activity": "AT_LKP_BLOB_HIST",
+              "dependencyConditions": [
+                "Succeeded"
+              ]
+            }
+          ],
+          "userProperties": [],
+          "typeProperties": {
+            "items": {
+              "value": "@activity('AT_LKP_BLOB_HIST').output.value",
+              "type": "Expression"
+            },
+            "isSequential": true,
+            "activities": [
+              {
+                "name": "AT_SP_StartExecutionLog",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "storedProcedureName": "[EtlLog].[uspExecutionStartLog]",
+                  "storedProcedureParameters": {
+                    "ActivityID": {
+                      "value": {
+                        "value": "@guid()",
+                        "type": "Expression"
+                      },
+                      "type": "Guid"
+                    },
+                    "ActivityName": {
+                      "value": "AT_CPY_CD_LEOFFLINE_HPC_DOCUMENT_LANDED",
+                      "type": "String"
+                    },
+                    "BatchDetailID": {
+                      "value": {
+                        "value": "@pipeline().parameters.BatchDetailID",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    }
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ASQL",
+                  "type": "LinkedServiceReference"
+                }
+              },
+              {
+                "name": "AT_SP_EndExecutionLog_Success",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                  {
+                    "activity": "AT_CPY_CD_LEOFFLINE_HPC_DOCUMENT_LANDED",
+                    "dependencyConditions": [
+                      "Succeeded"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "storedProcedureName": "[EtlLog].[uspExecutionEndLogV1]",
+                  "storedProcedureParameters": {
+                    "ActivityName": {
+                      "value": "AT_CPY_CD_LEOFFLINE_HPC_DOCUMENT_LANDED",
+                      "type": "String"
+                    },
+                    "BatchDetailID": {
+                      "value": {
+                        "value": "@pipeline().parameters.BatchDetailID",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "RulesApplied": {
+                      "value": "false",
+                      "type": "Boolean"
+                    },
+                    "SourceName": {
+                      "value": "CD_LE_OFFLINE",
+                      "type": "String"
+                    },
+                    "SourceObject": {
+                      "value": "Centegy_SnDPro_UID_HPC.VDL_DOCUMENT",
+                      "type": "String"
+                    },
+                    "Status": {
+                      "value": "Succeeded",
+                      "type": "String"
+                    },
+                    "TargetObject": {
+                      "value": {
+                        "value": "@concat('unilever/UniversalDataLake/InternalSources/LeveredgeOffline/AWS/SQLServer/HPC/Indonesia/VDLDocument/Processed/YYYY=',formatDateTime(utcnow(),'yyyy'),'/MM=',formatDateTime(utcnow(),'MM'),'/DD=',formatDateTime(utcnow(),'dd'))",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "SourceRowCount": {
+                      "value": {
+                        "value": "@activity('AT_CPY_CD_LEOFFLINE_HPC_DOCUMENT_LANDED').output.rowsRead",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "TargetRowCount": {
+                      "value": {
+                        "value": "@activity('AT_CPY_CD_LEOFFLINE_HPC_DOCUMENT_LANDED').output.rowsCopied",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "ErrorRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    }
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ASQL",
+                  "type": "LinkedServiceReference"
+                }
+              },
+              {
+                "name": "AT_SP_EndExecutionLog_Failure",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                  {
+                    "activity": "AT_CPY_CD_LEOFFLINE_HPC_DOCUMENT_LANDED",
+                    "dependencyConditions": [
+                      "Failed"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "storedProcedureName": "[EtlLog].[uspExecutionEndLogV1]",
+                  "storedProcedureParameters": {
+                    "ActivityName": {
+                      "value": "AT_CPY_CD_LEOFFLINE_HPC_DOCUMENT_LANDED",
+                      "type": "String"
+                    },
+                    "BatchDetailID": {
+                      "value": {
+                        "value": "@pipeline().parameters.BatchDetailID",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "RulesApplied": {
+                      "value": "false",
+                      "type": "Boolean"
+                    },
+                    "SourceName": {
+                      "value": "CD_LE_OFFLINE",
+                      "type": "String"
+                    },
+                    "SourceObject": {
+                      "value": "Centegy_SnDPro_UID_HPC.VDL_DOCUMENT",
+                      "type": "String"
+                    },
+                    "Status": {
+                      "value": "Failure",
+                      "type": "String"
+                    },
+                    "TargetObject": {
+                      "value": {
+                        "value": "@concat('unilever/UniversalDataLake/InternalSources/LeveredgeOffline/AWS/SQLServer/HPC/Indonesia/VDLDocument/Processed/YYYY=',formatDateTime(utcnow(),'yyyy'),'/MM=',formatDateTime(utcnow(),'MM'),'/DD=',formatDateTime(utcnow(),'dd'))",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "SourceRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "TargetRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "ErrorRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    }
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ASQL",
+                  "type": "LinkedServiceReference"
+                }
+              },
+              {
+                "name": "AT_CPY_CD_LEOFFLINE_HPC_DOCUMENT_LANDED",
+                "type": "Copy",
+                "dependsOn": [
+                  {
+                    "activity": "AT_SP_StartExecutionLog",
+                    "dependencyConditions": [
+                      "Succeeded"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "source": {
+                    "type": "SqlServerSource",
+                    "sqlReaderQuery": {
+                      "value": "select * from VDL_Document where Year(DocumentDate) = @{item().YearPartition}",
+                      "type": "Expression"
+                    },
+                    "partitionOption": "None"
+                  },
+                  "sink": {
+                    "type": "AzureBlobFSSink"
+                  },
+                  "enableStaging": false,
+                  "dataIntegrationUnits": 0,
+                  "translator": {
+                    "type": "TabularTranslator",
+                    "mappings": [
+                      {
+                        "source": {
+                          "name": "CompanyCode"
+                        },
+                        "sink": {
+                          "name": "CompanyCode"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "DistributorCode"
+                        },
+                        "sink": {
+                          "name": "DistributorCode"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "DocumentNumber"
+                        },
+                        "sink": {
+                          "name": "DocumentNumber"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "DocumentType"
+                        },
+                        "sink": {
+                          "name": "DocumentType"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "ProductCode"
+                        },
+                        "sink": {
+                          "name": "ProductCode"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "ProductType"
+                        },
+                        "sink": {
+                          "name": "ProductType"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "BatchCode"
+                        },
+                        "sink": {
+                          "name": "BatchCode"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "DetailID"
+                        },
+                        "sink": {
+                          "name": "DetailID"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "OutletCode"
+                        },
+                        "sink": {
+                          "name": "OutletCode"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "RouteCode"
+                        },
+                        "sink": {
+                          "name": "RouteCode"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "DeliverRouteCode"
+                        },
+                        "sink": {
+                          "name": "DeliverRouteCode"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "DocumentDate"
+                        },
+                        "sink": {
+                          "name": "DocumentDate"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "DeliverDate"
+                        },
+                        "sink": {
+                          "name": "DeliverDate"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "DeliverQuanitity"
+                        },
+                        "sink": {
+                          "name": "DeliverQuanitity"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "GrossAmount"
+                        },
+                        "sink": {
+                          "name": "GrossAmount"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "TaxAmount"
+                        },
+                        "sink": {
+                          "name": "TaxAmount"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "DiscountAmount"
+                        },
+                        "sink": {
+                          "name": "DiscountAmount"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "FreeGoodsIndicator"
+                        },
+                        "sink": {
+                          "name": "FreeGoodsIndicator"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "DiscountCode"
+                        },
+                        "sink": {
+                          "name": "DiscountCode"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "ReasonCode"
+                        },
+                        "sink": {
+                          "name": "ReasonCode"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "ReferenceDocumentNumber"
+                        },
+                        "sink": {
+                          "name": "ReferenceDocumentNumber"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "iRowVersion"
+                        },
+                        "sink": {
+                          "name": "iRowVersion"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "ModifyUser"
+                        },
+                        "sink": {
+                          "name": "ModifyUser"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "ModifyDate"
+                        },
+                        "sink": {
+                          "name": "ModifyDate"
+                        }
+                      },
+                      {
+                        "source": {
+                          "name": "DocumentStatus"
+                        },
+                        "sink": {
+                          "name": "DocumentStatus"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "inputs": [
+                  {
+                    "referenceName": "DS_SQL_LE_OFFLINE_HPC_DOCUMENT",
+                    "type": "DatasetReference"
+                  }
+                ],
+                "outputs": [
+                  {
+                    "referenceName": "DS_ADLS_LE_OFFLINE_HPC_HIST_DOCUMENT",
+                    "type": "DatasetReference"
+                  }
+                ]
+              },
+              {
+                "name": "AT_SP_EndExecutionLog_Success_OnSP_Fail",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                  {
+                    "activity": "AT_SP_EndExecutionLog_Success",
+                    "dependencyConditions": [
+                      "Failed"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "storedProcedureName": "[EtlLog].[uspExecutionEndLogV1]",
+                  "storedProcedureParameters": {
+                    "ActivityName": {
+                      "value": "AT_CPY_CD_LEOFFLINE_HPC_DOCUMENT_LANDED",
+                      "type": "String"
+                    },
+                    "BatchDetailID": {
+                      "value": {
+                        "value": "@pipeline().parameters.BatchDetailID",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "RulesApplied": {
+                      "value": "false",
+                      "type": "Boolean"
+                    },
+                    "SourceName": {
+                      "value": "CD_LE_OFFLINE",
+                      "type": "String"
+                    },
+                    "SourceObject": {
+                      "value": "Centegy_SnDPro_UID_HPC.VDL_DOCUMENT",
+                      "type": "String"
+                    },
+                    "Status": {
+                      "value": "Succeeded",
+                      "type": "String"
+                    },
+                    "TargetObject": {
+                      "value": {
+                        "value": "@concat('unilever/UniversalDataLake/InternalSources/LeveredgeOffline/AWS/SQLServer/HPC/Indonesia/VDLDocument/Processed/YYYY=',formatDateTime(utcnow(),'yyyy'),'/MM=',formatDateTime(utcnow(),'MM'),'/DD=',formatDateTime(utcnow(),'dd'))",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "SourceRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "TargetRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "ErrorRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    }
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ASQL",
+                  "type": "LinkedServiceReference"
+                }
+              },
+              {
+                "name": "AT_SP_EndExecutionErrorLog",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                  {
+                    "activity": "AT_SP_EndExecutionLog_Failure",
+                    "dependencyConditions": [
+                      "Succeeded"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "storedProcedureName": "[EtlLog].[uspExecutionErrorLog]",
+                  "storedProcedureParameters": {
+                    "ActivityName": {
+                      "value": "AT_CPY_CD_LEOFFLINE_HPC_DOCUMENT_LANDED",
+                      "type": "String"
+                    },
+                    "BatchDetailID": {
+                      "value": {
+                        "value": "@pipeline().parameters.BatchDetailID",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "DetailedErrorLocation": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "ErrorMessage": {
+                      "value": {
+                        "value": "@activity('AT_CPY_CD_LEOFFLINE_HPC_DOCUMENT_LANDED').Error.message",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "JobType": {
+                      "value": "Copy",
+                      "type": "String"
+                    }
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ASQL",
+                  "type": "LinkedServiceReference"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "parameters": {
+        "SliceStartTime": {
+          "type": "String",
+          "defaultValue": "2018-01-01"
+        },
+        "CustomSliceStart": {
+          "type": "Bool",
+          "defaultValue": false
+        },
+        "ToBeResumed": {
+          "type": "Bool",
+          "defaultValue": false
+        },
+        "ParentBatchId": {
+          "type": "Int",
+          "defaultValue": 1
+        },
+        "LoadType": {
+          "type": "String",
+          "defaultValue": "Incremental"
+        },
+        "PreviousSliceDateTime": {
+          "type": "String",
+          "defaultValue": "2018-01-02"
+        },
+        "sp_null": {
+          "type": "string"
+        },
+        "BatchDetailID": {
+          "type": "int"
+        }
+      },
+      "folder": {
+        "name": "LE_OFFLINE"
+      },
+      "annotations": [],
+      "lastPublishTime": "2023-04-07T10:17:01Z"
+    },
+    "type": "Microsoft.DataFactory/factories/pipelines"
+  }
+]
