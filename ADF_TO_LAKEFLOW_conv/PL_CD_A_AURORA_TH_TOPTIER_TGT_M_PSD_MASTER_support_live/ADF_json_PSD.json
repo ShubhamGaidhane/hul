@@ -1,0 +1,1833 @@
+[
+  {
+    "now": "2026-06-30T05:49:40.831Z",
+    "perfNow": 193730.29999995232,
+    "diagnosticCorrelation": "dc170f02-4423-4fc7-a6d2-8868f806d303",
+    "source": "DownloadSupportFiles",
+    "environment": {
+      "productName": "adf",
+      "buildVersion": "1.0.060526.5",
+      "environmentType": 3,
+      "resourceName": "bieno-da06-b-80066-adf-cd-05",
+      "resourceRegion": "northeurope",
+      "resourceGroup": "bieno-da06-b-80066-rg",
+      "subscriptionId": "7796e2b1-1c51-4a77-accf-3c035b59a22e",
+      "sessionId": "fnpfjdpuqtlDxmTiofchbG",
+      "operationId": "",
+      "gitType": "live",
+      "loggingKey": "6c1c6d4e-f6bb-4699-ab3a-f0987787f38a"
+    },
+    "additionalInfo": {
+      "selectedResource": "PL_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_MASTER",
+      "selectedResourceType": "pipeline"
+    }
+  },
+  {
+    "name": "DS_CD_TOPTIER_TH_ADLS",
+    "properties": {
+      "linkedServiceName": {
+        "referenceName": "LS_ADLS",
+        "type": "LinkedServiceReference"
+      },
+      "parameters": {
+        "TargetObject": {
+          "type": "string"
+        },
+        "FileName": {
+          "type": "string"
+        }
+      },
+      "annotations": [],
+      "type": "DelimitedText",
+      "typeProperties": {
+        "location": {
+          "type": "AzureBlobFSLocation",
+          "fileName": {
+            "value": "@concat(dataset().FileName,'.csv')",
+            "type": "Expression"
+          },
+          "folderPath": {
+            "value": "@{concat('YYYY=',string(formatDateTime(UTCNOW(),'yyyy')),'/MM=',string(formatDateTime(UTCNOW(),'MM')),'/DD=',string(formatDateTime(UTCNOW(),'dd')))}",
+            "type": "Expression"
+          },
+          "fileSystem": {
+            "value": "@dataset().TargetObject",
+            "type": "Expression"
+          }
+        },
+        "columnDelimiter": ",",
+        "escapeChar": "\\",
+        "firstRowAsHeader": true,
+        "quoteChar": "\""
+      },
+      "schema": []
+    },
+    "type": "Microsoft.DataFactory/factories/datasets"
+  },
+  {
+    "name": "DS_CD_TOPTIER_TH_BLOB",
+    "properties": {
+      "linkedServiceName": {
+        "referenceName": "LS_ABLB",
+        "type": "LinkedServiceReference"
+      },
+      "parameters": {
+        "FolderName": {
+          "type": "string"
+        },
+        "FileName": {
+          "type": "string"
+        },
+        "SheetIndex": {
+          "type": "int"
+        }
+      },
+      "annotations": [],
+      "type": "Excel",
+      "typeProperties": {
+        "location": {
+          "type": "AzureBlobStorageLocation",
+          "fileName": {
+            "value": "@concat(dataset().FileName,'.xlsx')",
+            "type": "Expression"
+          },
+          "folderPath": {
+            "value": "@dataset().FolderName",
+            "type": "Expression"
+          },
+          "container": "cd-aurora-th/toptier"
+        },
+        "sheetIndex": {
+          "value": "@dataset().SheetIndex",
+          "type": "Expression"
+        },
+        "firstRowAsHeader": true
+      },
+      "schema": []
+    },
+    "type": "Microsoft.DataFactory/factories/datasets"
+  },
+  {
+    "name": "DS_CD_TOPTIER_TH_PROCESSED_ADLS",
+    "properties": {
+      "linkedServiceName": {
+        "referenceName": "LS_ADLS",
+        "type": "LinkedServiceReference"
+      },
+      "parameters": {
+        "Location": {
+          "type": "string"
+        }
+      },
+      "annotations": [],
+      "type": "Parquet",
+      "typeProperties": {
+        "location": {
+          "type": "AzureBlobFSLocation",
+          "fileSystem": {
+            "value": "@dataset().Location",
+            "type": "Expression"
+          }
+        },
+        "compressionCodec": "snappy"
+      },
+      "schema": []
+    },
+    "type": "Microsoft.DataFactory/factories/datasets"
+  },
+  {
+    "name": "DS_SQL_BATCH_NEW",
+    "properties": {
+      "linkedServiceName": {
+        "referenceName": "LS_ASQL",
+        "type": "LinkedServiceReference"
+      },
+      "annotations": [],
+      "type": "AzureSqlTable",
+      "structure": [
+        {
+          "name": "BatchID",
+          "type": "Int32"
+        },
+        {
+          "name": "ParentBatchID",
+          "type": "Int32"
+        },
+        {
+          "name": "JobID",
+          "type": "Int32"
+        },
+        {
+          "name": "BatchStatus",
+          "type": "String"
+        },
+        {
+          "name": "StartTime",
+          "type": "DateTime"
+        },
+        {
+          "name": "EndTime",
+          "type": "DateTime"
+        },
+        {
+          "name": "SliceDateTime",
+          "type": "DateTime"
+        },
+        {
+          "name": "RunID",
+          "type": "Guid"
+        }
+      ],
+      "typeProperties": {
+        "tableName": "[EtlLog].[Batch]"
+      }
+    },
+    "type": "Microsoft.DataFactory/factories/datasets"
+  },
+  {
+    "name": "LS_ABLB",
+    "type": "Microsoft.DataFactory/factories/linkedservices",
+    "properties": {
+      "description": "LS_ABLB",
+      "annotations": [],
+      "type": "AzureBlobStorage",
+      "typeProperties": {
+        "serviceEndpoint": "https://dbstorageda06b80066.blob.core.windows.net/",
+        "tenant": "f66fae02-5d36-495b-bfe0-78a6ff9f8e6e",
+        "servicePrincipalId": "3a04829e-e5ba-498d-805d-450972cabd11",
+        "servicePrincipalKey": {
+          "type": "AzureKeyVaultSecret",
+          "store": {
+            "referenceName": "LS_KV_LOCAL",
+            "type": "LinkedServiceReference"
+          },
+          "secretName": "svc-b-da-b-80066-ina-aadprincipal"
+        },
+        "accountKind": "StorageV2"
+      }
+    }
+  },
+  {
+    "name": "LS_ADLS",
+    "type": "Microsoft.DataFactory/factories/linkedservices",
+    "properties": {
+      "annotations": [],
+      "type": "AzureBlobFS",
+      "typeProperties": {
+        "url": "https://dbstorageda06b80066adls.dfs.core.windows.net",
+        "tenant": "f66fae02-5d36-495b-bfe0-78a6ff9f8e6e",
+        "servicePrincipalId": "3a04829e-e5ba-498d-805d-450972cabd11",
+        "servicePrincipalKey": {
+          "type": "AzureKeyVaultSecret",
+          "store": {
+            "referenceName": "LS_KV_LOCAL",
+            "type": "LinkedServiceReference"
+          },
+          "secretName": "svc-b-da-b-80066-ina-aadprincipal"
+        }
+      }
+    }
+  },
+  {
+    "name": "LS_ASQL",
+    "type": "Microsoft.DataFactory/factories/linkedservices",
+    "properties": {
+      "annotations": [],
+      "type": "AzureSqlDatabase",
+      "typeProperties": {
+        "connectionString": {
+          "type": "AzureKeyVaultSecret",
+          "store": {
+            "referenceName": "LS_KV_LOCAL",
+            "type": "LinkedServiceReference"
+          },
+          "secretName": "mcsConnectionString"
+        }
+      }
+    }
+  },
+  {
+    "name": "LS_KV_LOCAL",
+    "type": "Microsoft.DataFactory/factories/linkedservices",
+    "properties": {
+      "annotations": [],
+      "type": "AzureKeyVault",
+      "typeProperties": {
+        "baseUrl": "https://bieno-da06-b-80066-kv-01.vault.azure.net/"
+      }
+    }
+  },
+  {
+    "name": "PL_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_LANDED",
+    "properties": {
+      "activities": [
+        {
+          "name": "AT_LKP_InsertBatchDetails",
+          "type": "Lookup",
+          "dependsOn": [],
+          "policy": {
+            "timeout": "7.00:00:00",
+            "retry": 0,
+            "retryIntervalInSeconds": 30,
+            "secureOutput": false,
+            "secureInput": false
+          },
+          "userProperties": [],
+          "typeProperties": {
+            "source": {
+              "type": "AzureSqlSource",
+              "sqlReaderStoredProcedureName": "[EtlLog].[uspBatchDetailStartLog]",
+              "storedProcedureParameters": {
+                "JobName": {
+                  "type": "String",
+                  "value": {
+                    "value": "@pipeline().Pipeline",
+                    "type": "Expression"
+                  }
+                },
+                "ParentBatchID": {
+                  "type": "Int32",
+                  "value": {
+                    "value": "@pipeline().parameters.ParentBatchId",
+                    "type": "Expression"
+                  }
+                },
+                "RunID": {
+                  "type": "Guid",
+                  "value": {
+                    "value": "@pipeline().RunId",
+                    "type": "Expression"
+                  }
+                },
+                "ToBeResume": {
+                  "type": "Boolean",
+                  "value": {
+                    "value": "@pipeline().parameters.ToBeResumed",
+                    "type": "Expression"
+                  }
+                }
+              },
+              "partitionOption": "None"
+            },
+            "dataset": {
+              "referenceName": "DS_SQL_BATCH_NEW",
+              "type": "DatasetReference"
+            },
+            "firstRowOnly": true
+          }
+        },
+        {
+          "name": "AT_IF_ExecCheckLanded",
+          "type": "IfCondition",
+          "dependsOn": [
+            {
+              "activity": "AT_LKP_InsertBatchDetails",
+              "dependencyConditions": [
+                "Succeeded"
+              ]
+            }
+          ],
+          "userProperties": [],
+          "typeProperties": {
+            "expression": {
+              "value": "@bool(activity('AT_LKP_InsertBatchDetails').output.firstRow.ToBeRun)",
+              "type": "Expression"
+            },
+            "ifTrueActivities": [
+              {
+                "name": "AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_LANDED",
+                "type": "Copy",
+                "dependsOn": [
+                  {
+                    "activity": "AT_SP_StartExecutionLog",
+                    "dependencyConditions": [
+                      "Succeeded"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false,
+                  "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "source": {
+                    "type": "ExcelSource",
+                    "storeSettings": {
+                      "type": "AzureBlobStorageReadSettings",
+                      "recursive": true,
+                      "enablePartitionDiscovery": false
+                    }
+                  },
+                  "sink": {
+                    "type": "DelimitedTextSink",
+                    "storeSettings": {
+                      "type": "AzureBlobFSWriteSettings"
+                    },
+                    "formatSettings": {
+                      "type": "DelimitedTextWriteSettings",
+                      "quoteAllText": true,
+                      "fileExtension": ".csv"
+                    }
+                  },
+                  "enableStaging": false,
+                  "translator": {
+                    "type": "TabularTranslator",
+                    "typeConversion": true,
+                    "typeConversionSettings": {
+                      "allowDataTruncation": true,
+                      "treatBooleanAsNumber": false
+                    }
+                  }
+                },
+                "inputs": [
+                  {
+                    "referenceName": "DS_CD_TOPTIER_TH_BLOB",
+                    "type": "DatasetReference",
+                    "parameters": {
+                      "FolderName": {
+                        "value": "@pipeline().parameters.FolderName",
+                        "type": "Expression"
+                      },
+                      "FileName": {
+                        "value": "@pipeline().parameters.FileName",
+                        "type": "Expression"
+                      },
+                      "SheetIndex": {
+                        "value": "@pipeline().parameters.SheetIndex",
+                        "type": "Expression"
+                      }
+                    }
+                  }
+                ],
+                "outputs": [
+                  {
+                    "referenceName": "DS_CD_TOPTIER_TH_ADLS",
+                    "type": "DatasetReference",
+                    "parameters": {
+                      "TargetObject": {
+                        "value": "@pipeline().parameters.TargetObject",
+                        "type": "Expression"
+                      },
+                      "FileName": {
+                        "value": "@pipeline().parameters.FileName",
+                        "type": "Expression"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "AT_SP_StartExecutionLog",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "storedProcedureName": "[EtlLog].[uspExecutionStartLog]",
+                  "storedProcedureParameters": {
+                    "ActivityID": {
+                      "value": {
+                        "value": "@guid()",
+                        "type": "Expression"
+                      },
+                      "type": "Guid"
+                    },
+                    "ActivityName": {
+                      "value": "AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_LANDED",
+                      "type": "String"
+                    },
+                    "BatchDetailID": {
+                      "value": {
+                        "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    }
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ASQL",
+                  "type": "LinkedServiceReference"
+                }
+              },
+              {
+                "name": "AT_SP_EndExecutionLog_Success",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                  {
+                    "activity": "AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_LANDED",
+                    "dependencyConditions": [
+                      "Succeeded"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "storedProcedureName": "[EtlLog].[uspExecutionEndLogV1]",
+                  "storedProcedureParameters": {
+                    "ActivityName": {
+                      "value": "AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_LANDED",
+                      "type": "String"
+                    },
+                    "BatchDetailID": {
+                      "value": {
+                        "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "RulesApplied": {
+                      "value": "False",
+                      "type": "Boolean"
+                    },
+                    "SourceName": {
+                      "value": {
+                        "value": "@pipeline().parameters.SourceName",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "SourceObject": {
+                      "value": {
+                        "value": "@pipeline().parameters.SourceObject",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "Status": {
+                      "value": "Succeeded",
+                      "type": "String"
+                    },
+                    "TargetObject": {
+                      "value": {
+                        "value": "@{concat(pipeline().parameters.TargetObject,'YYYY=',formatDateTime(UTCNOW(),'yyyy'))}/@{concat('MM=',formatDateTime(UTCNOW(),'MM'))}/@{concat('DD=',formatDateTime(UTCNOW(),'dd'))}",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "SourceRowCount": {
+                      "value": {
+                        "value": "@activity('AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_LANDED').output.rowsRead",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "TargetRowCount": {
+                      "value": {
+                        "value": "@activity('AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_LANDED').output.rowsCopied",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "ErrorRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    }
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ASQL",
+                  "type": "LinkedServiceReference"
+                }
+              },
+              {
+                "name": "AT_SP_EndExecutionLog_Failure",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                  {
+                    "activity": "AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_LANDED",
+                    "dependencyConditions": [
+                      "Failed"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "storedProcedureName": "[EtlLog].[uspExecutionEndLogV1]",
+                  "storedProcedureParameters": {
+                    "ActivityName": {
+                      "value": "AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_LANDED",
+                      "type": "String"
+                    },
+                    "BatchDetailID": {
+                      "value": {
+                        "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "RulesApplied": {
+                      "value": "False",
+                      "type": "Boolean"
+                    },
+                    "SourceName": {
+                      "value": {
+                        "value": "@pipeline().parameters.SourceName",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "SourceObject": {
+                      "value": {
+                        "value": "@pipeline().parameters.SourceObject",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "Status": {
+                      "value": "Failure",
+                      "type": "String"
+                    },
+                    "TargetObject": {
+                      "value": {
+                        "value": "@{concat(pipeline().parameters.TargetObject,'YYYY=',formatDateTime(UTCNOW(),'yyyy'))}/@{concat('MM=',formatDateTime(UTCNOW(),'MM'))}/@{concat('DD=',formatDateTime(UTCNOW(),'dd'))}",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "SourceRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "TargetRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "ErrorRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    }
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ASQL",
+                  "type": "LinkedServiceReference"
+                }
+              },
+              {
+                "name": "AT_SP_EndExecutionLog_Success_OnSP_Fail",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                  {
+                    "activity": "AT_SP_EndExecutionLog_Success",
+                    "dependencyConditions": [
+                      "Failed"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "storedProcedureName": "[EtlLog].[uspExecutionEndLogV1]",
+                  "storedProcedureParameters": {
+                    "ActivityName": {
+                      "value": "AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_LANDED",
+                      "type": "String"
+                    },
+                    "BatchDetailID": {
+                      "value": {
+                        "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "RulesApplied": {
+                      "value": "False",
+                      "type": "Boolean"
+                    },
+                    "SourceName": {
+                      "value": {
+                        "value": "@pipeline().parameters.SourceName",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "SourceObject": {
+                      "value": {
+                        "value": "@pipeline().parameters.SourceObject",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "Status": {
+                      "value": "Succeeded",
+                      "type": "String"
+                    },
+                    "TargetObject": {
+                      "value": {
+                        "value": "@{concat(pipeline().parameters.TargetObject,'YYYY=',formatDateTime(UTCNOW(),'yyyy'))}/@{concat('MM=',formatDateTime(UTCNOW(),'MM'))}/@{concat('DD=',formatDateTime(UTCNOW(),'dd'))}",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "SourceRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "TargetRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "ErrorRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    }
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ASQL",
+                  "type": "LinkedServiceReference"
+                }
+              },
+              {
+                "name": "AT_SP_EndExecutionErrorLog",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                  {
+                    "activity": "AT_SP_EndExecutionLog_Failure",
+                    "dependencyConditions": [
+                      "Succeeded"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "storedProcedureName": "[EtlLog].[uspExecutionErrorLog]",
+                  "storedProcedureParameters": {
+                    "ActivityName": {
+                      "value": "AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_LANDED",
+                      "type": "String"
+                    },
+                    "BatchDetailID": {
+                      "value": {
+                        "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "DetailedErrorLocation": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "ErrorMessage": {
+                      "value": {
+                        "value": "@activity('AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_LANDED').Error.message",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "JobType": {
+                      "value": "Copy",
+                      "type": "String"
+                    }
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ASQL",
+                  "type": "LinkedServiceReference"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "AT_SP_EndBatchDetails",
+          "type": "SqlServerStoredProcedure",
+          "dependsOn": [
+            {
+              "activity": "AT_IF_ExecCheckLanded",
+              "dependencyConditions": [
+                "Succeeded"
+              ]
+            }
+          ],
+          "policy": {
+            "timeout": "7.00:00:00",
+            "retry": 0,
+            "retryIntervalInSeconds": 30,
+            "secureOutput": false
+          },
+          "userProperties": [],
+          "typeProperties": {
+            "storedProcedureName": "[EtlLog].[uspBatchDetailEndLog]",
+            "storedProcedureParameters": {
+              "BatchDetailID": {
+                "value": {
+                  "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                  "type": "Expression"
+                },
+                "type": "Int32"
+              }
+            }
+          },
+          "linkedServiceName": {
+            "referenceName": "LS_ASQL",
+            "type": "LinkedServiceReference"
+          }
+        }
+      ],
+      "parameters": {
+        "SliceStartTime": {
+          "type": "string",
+          "defaultValue": "2018-01-01"
+        },
+        "CustomSliceStart": {
+          "type": "bool",
+          "defaultValue": false
+        },
+        "ToBeResumed": {
+          "type": "bool",
+          "defaultValue": false
+        },
+        "ParentBatchId": {
+          "type": "int",
+          "defaultValue": 1
+        },
+        "LoadType": {
+          "type": "string",
+          "defaultValue": "Full Refresh"
+        },
+        "PreviousSliceDateTime": {
+          "type": "string",
+          "defaultValue": "2018-01-02"
+        },
+        "sp_null": {
+          "type": "string",
+          "defaultValue": null
+        },
+        "FolderName": {
+          "type": "string",
+          "defaultValue": "targetmasterpsd"
+        },
+        "FileName": {
+          "type": "string",
+          "defaultValue": "ufstar_psd_nospread"
+        },
+        "SheetIndex": {
+          "type": "int",
+          "defaultValue": 0
+        },
+        "SourceName": {
+          "type": "string",
+          "defaultValue": "TopTier"
+        },
+        "SourceObject": {
+          "type": "string",
+          "defaultValue": "Target Master PSD"
+        },
+        "TargetObject": {
+          "type": "string",
+          "defaultValue": "unilever/UniversalDataLake/InternalSources/TopTier/BlobFileShare/TH/TargetMasterPSD/LandedFiles"
+        }
+      },
+      "folder": {
+        "name": "TH_TopTier_Blob"
+      },
+      "annotations": [],
+      "lastPublishTime": "2023-02-03T04:34:41Z"
+    },
+    "type": "Microsoft.DataFactory/factories/pipelines"
+  },
+  {
+    "name": "PL_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_MASTER",
+    "properties": {
+      "activities": [
+        {
+          "name": "AT_LKP_InsertBatch",
+          "type": "Lookup",
+          "dependsOn": [],
+          "policy": {
+            "timeout": "7.00:00:00",
+            "retry": 0,
+            "retryIntervalInSeconds": 30,
+            "secureOutput": false,
+            "secureInput": false
+          },
+          "userProperties": [],
+          "typeProperties": {
+            "source": {
+              "type": "AzureSqlSource",
+              "sqlReaderStoredProcedureName": "[EtlLog].[uspBatchStartLog]",
+              "storedProcedureParameters": {
+                "JobName": {
+                  "type": "String",
+                  "value": {
+                    "value": "@pipeline().Pipeline",
+                    "type": "Expression"
+                  }
+                },
+                "RunID": {
+                  "type": "Guid",
+                  "value": {
+                    "value": "@pipeline().RunId",
+                    "type": "Expression"
+                  }
+                },
+                "SliceDateTime": {
+                  "type": "DateTime",
+                  "value": {
+                    "value": "@if(pipeline().parameters.CustomSliceStart, pipeline().parameters.SliceStartTime, pipeline().TriggerTime)",
+                    "type": "Expression"
+                  }
+                },
+                "ToBeResume": {
+                  "type": "Boolean",
+                  "value": {
+                    "value": "@pipeline().parameters.ToBeResumed",
+                    "type": "Expression"
+                  }
+                }
+              },
+              "queryTimeout": "02:00:00",
+              "partitionOption": "None"
+            },
+            "dataset": {
+              "referenceName": "DS_SQL_BATCH_NEW",
+              "type": "DatasetReference"
+            },
+            "firstRowOnly": true
+          }
+        },
+        {
+          "name": "AT_SP_EndBatch",
+          "type": "SqlServerStoredProcedure",
+          "dependsOn": [
+            {
+              "activity": "AT_IF_ExecCheckMaster",
+              "dependencyConditions": [
+                "Completed"
+              ]
+            }
+          ],
+          "policy": {
+            "timeout": "7.00:00:00",
+            "retry": 0,
+            "retryIntervalInSeconds": 30,
+            "secureOutput": false,
+            "secureInput": false
+          },
+          "userProperties": [],
+          "typeProperties": {
+            "storedProcedureName": "[EtlLog].[uspBatchEndLog]",
+            "storedProcedureParameters": {
+              "BatchID": {
+                "value": {
+                  "value": "@activity('AT_LKP_InsertBatch').output.firstRow.BatchID",
+                  "type": "Expression"
+                },
+                "type": "Int32"
+              }
+            }
+          },
+          "linkedServiceName": {
+            "referenceName": "LS_ASQL",
+            "type": "LinkedServiceReference"
+          }
+        },
+        {
+          "name": "AT_IF_ExecCheckMaster",
+          "type": "IfCondition",
+          "dependsOn": [
+            {
+              "activity": "AT_LKP_InsertBatch",
+              "dependencyConditions": [
+                "Succeeded"
+              ]
+            }
+          ],
+          "userProperties": [],
+          "typeProperties": {
+            "expression": {
+              "value": "@bool(activity('AT_LKP_InsertBatch').output.firstRow.ToBeRun)",
+              "type": "Expression"
+            },
+            "ifTrueActivities": [
+              {
+                "name": "AT_EXEP_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_LANDED",
+                "type": "ExecutePipeline",
+                "dependsOn": [],
+                "policy": {
+                  "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "pipeline": {
+                    "referenceName": "PL_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_LANDED",
+                    "type": "PipelineReference"
+                  },
+                  "waitOnCompletion": true,
+                  "parameters": {
+                    "SliceStartTime": {
+                      "value": "@pipeline().parameters.SliceStartTime",
+                      "type": "Expression"
+                    },
+                    "CustomSliceStart": {
+                      "value": "@pipeline().parameters.CustomSliceStart",
+                      "type": "Expression"
+                    },
+                    "ToBeResumed": {
+                      "value": "@pipeline().parameters.ToBeResumed",
+                      "type": "Expression"
+                    },
+                    "ParentBatchId": {
+                      "value": "@activity('AT_LKP_InsertBatch').output.firstRow.BatchID",
+                      "type": "Expression"
+                    },
+                    "LoadType": {
+                      "value": "@pipeline().parameters.LoadType",
+                      "type": "Expression"
+                    },
+                    "PreviousSliceDateTime": {
+                      "value": "@activity('AT_LKP_InsertBatch').output.firstRow.PreviousSliceDateTime",
+                      "type": "Expression"
+                    },
+                    "sp_null": {
+                      "value": "@pipeline().parameters.sp_null",
+                      "type": "Expression"
+                    }
+                  }
+                }
+              },
+              {
+                "name": "AT_WAIT_3",
+                "type": "Wait",
+                "dependsOn": [
+                  {
+                    "activity": "AT_EXEP_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_LANDED",
+                    "dependencyConditions": [
+                      "Succeeded"
+                    ]
+                  }
+                ],
+                "userProperties": [],
+                "typeProperties": {
+                  "waitTimeInSeconds": 3
+                }
+              },
+              {
+                "name": "AT_EXEP_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_PROCESSED",
+                "type": "ExecutePipeline",
+                "dependsOn": [
+                  {
+                    "activity": "AT_WAIT_3",
+                    "dependencyConditions": [
+                      "Succeeded"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "pipeline": {
+                    "referenceName": "PL_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_PROCESSED",
+                    "type": "PipelineReference"
+                  },
+                  "waitOnCompletion": true,
+                  "parameters": {
+                    "SliceStartTime": {
+                      "value": "@pipeline().parameters.SliceStartTime",
+                      "type": "Expression"
+                    },
+                    "CustomSliceStart": {
+                      "value": "@pipeline().parameters.CustomSliceStart",
+                      "type": "Expression"
+                    },
+                    "ToBeResumed": {
+                      "value": "@pipeline().parameters.ToBeResumed",
+                      "type": "Expression"
+                    },
+                    "ParentBatchId": {
+                      "value": "@activity('AT_LKP_InsertBatch').output.firstRow.BatchID",
+                      "type": "Expression"
+                    },
+                    "LoadType": {
+                      "value": "@pipeline().parameters.LoadType",
+                      "type": "Expression"
+                    },
+                    "PreviousSliceDateTime": {
+                      "value": "@activity('AT_LKP_InsertBatch').output.firstRow.PreviousSliceDateTime",
+                      "type": "Expression"
+                    },
+                    "sp_null": {
+                      "value": "@pipeline().parameters.sp_null",
+                      "type": "Expression"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "parameters": {
+        "SliceStartTime": {
+          "type": "string",
+          "defaultValue": "2018-01-01"
+        },
+        "CustomSliceStart": {
+          "type": "bool",
+          "defaultValue": false
+        },
+        "ToBeResumed": {
+          "type": "bool",
+          "defaultValue": false
+        },
+        "LoadType": {
+          "type": "string",
+          "defaultValue": "Full Load"
+        },
+        "sp_null": {
+          "type": "string"
+        }
+      },
+      "folder": {
+        "name": "TH_TopTier_Blob"
+      },
+      "annotations": [],
+      "lastPublishTime": "2023-02-03T04:53:11Z"
+    },
+    "type": "Microsoft.DataFactory/factories/pipelines"
+  },
+  {
+    "name": "PL_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_PROCESSED",
+    "properties": {
+      "activities": [
+        {
+          "name": "AT_IF_ExecCheckProcessed",
+          "type": "IfCondition",
+          "dependsOn": [
+            {
+              "activity": "AT_LKP_InsertBatchDetails",
+              "dependencyConditions": [
+                "Succeeded"
+              ]
+            }
+          ],
+          "userProperties": [],
+          "typeProperties": {
+            "expression": {
+              "value": "@bool(activity('AT_LKP_InsertBatchDetails').output.firstRow.ToBeRun)",
+              "type": "Expression"
+            },
+            "ifTrueActivities": [
+              {
+                "name": "AT_SP_StartExecutionLog",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "storedProcedureName": "[EtlLog].[uspExecutionStartLog]",
+                  "storedProcedureParameters": {
+                    "ActivityID": {
+                      "value": {
+                        "value": "@guid()",
+                        "type": "Expression"
+                      },
+                      "type": "Guid"
+                    },
+                    "ActivityName": {
+                      "value": "AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_PROCESSED",
+                      "type": "String"
+                    },
+                    "BatchDetailID": {
+                      "value": {
+                        "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    }
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ASQL",
+                  "type": "LinkedServiceReference"
+                }
+              },
+              {
+                "name": "AT_SP_EndExecutionLog_Success",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                  {
+                    "activity": "AT_DEL_AURORA_TOPTIER_TGT_M_PSD",
+                    "dependencyConditions": [
+                      "Succeeded"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "storedProcedureName": "[EtlLog].[uspExecutionEndLogV1]",
+                  "storedProcedureParameters": {
+                    "ActivityName": {
+                      "value": "AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_PROCESSED",
+                      "type": "String"
+                    },
+                    "BatchDetailID": {
+                      "value": {
+                        "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "RulesApplied": {
+                      "value": "false",
+                      "type": "Boolean"
+                    },
+                    "SourceName": {
+                      "value": {
+                        "value": "@pipeline().parameters.SourceName",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "SourceObject": {
+                      "value": {
+                        "value": "@pipeline().parameters.SourceObject",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "Status": {
+                      "value": "Succeeded",
+                      "type": "String"
+                    },
+                    "TargetObject": {
+                      "value": {
+                        "value": "@{concat(pipeline().parameters.TargetObject,'YYYY=',formatDateTime(UTCNOW(),'yyyy'))}/@{concat('MM=',formatDateTime(UTCNOW(),'MM'))}/@{concat('DD=',formatDateTime(UTCNOW(),'dd'))}",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "SourceRowCount": {
+                      "value": {
+                        "value": "@activity('AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_PROCESSED').output.rowsRead",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "TargetRowCount": {
+                      "value": {
+                        "value": "@activity('AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_PROCESSED').output.rowsCopied",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "ErrorRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    }
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ASQL",
+                  "type": "LinkedServiceReference"
+                }
+              },
+              {
+                "name": "AT_SP_EndExecutionLog_Failure",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                  {
+                    "activity": "AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_PROCESSED",
+                    "dependencyConditions": [
+                      "Failed"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "storedProcedureName": "[EtlLog].[uspExecutionEndLogV1]",
+                  "storedProcedureParameters": {
+                    "ActivityName": {
+                      "value": "AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_PROCESSED",
+                      "type": "String"
+                    },
+                    "BatchDetailID": {
+                      "value": {
+                        "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "RulesApplied": {
+                      "value": "false",
+                      "type": "Boolean"
+                    },
+                    "SourceName": {
+                      "value": {
+                        "value": "pipeline().parameters.SourceName",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "SourceObject": {
+                      "value": {
+                        "value": "@pipeline().parameters.SourceObject",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "Status": {
+                      "value": "Failure",
+                      "type": "String"
+                    },
+                    "TargetObject": {
+                      "value": {
+                        "value": "@{concat(pipeline().parameters.TargetObject,'YYYY=',formatDateTime(UTCNOW(),'yyyy'))}/@{concat('MM=',formatDateTime(UTCNOW(),'MM'))}/@{concat('DD=',formatDateTime(UTCNOW(),'dd'))}",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "SourceRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "TargetRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "ErrorRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    }
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ASQL",
+                  "type": "LinkedServiceReference"
+                }
+              },
+              {
+                "name": "AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_PROCESSED",
+                "type": "Copy",
+                "dependsOn": [
+                  {
+                    "activity": "AT_SP_StartExecutionLog",
+                    "dependencyConditions": [
+                      "Succeeded"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "source": {
+                    "type": "DelimitedTextSource",
+                    "storeSettings": {
+                      "type": "AzureBlobFSReadSettings",
+                      "recursive": true,
+                      "enablePartitionDiscovery": false
+                    },
+                    "formatSettings": {
+                      "type": "DelimitedTextReadSettings"
+                    }
+                  },
+                  "sink": {
+                    "type": "ParquetSink",
+                    "storeSettings": {
+                      "type": "AzureBlobFSWriteSettings"
+                    },
+                    "formatSettings": {
+                      "type": "ParquetWriteSettings"
+                    }
+                  },
+                  "enableStaging": false,
+                  "dataIntegrationUnits": 0
+                },
+                "inputs": [
+                  {
+                    "referenceName": "DS_CD_TOPTIER_TH_ADLS",
+                    "type": "DatasetReference",
+                    "parameters": {
+                      "TargetObject": {
+                        "value": "@pipeline().parameters.SourceObject",
+                        "type": "Expression"
+                      },
+                      "FileName": {
+                        "value": "@pipeline().parameters.FileName",
+                        "type": "Expression"
+                      }
+                    }
+                  }
+                ],
+                "outputs": [
+                  {
+                    "referenceName": "DS_CD_TOPTIER_TH_PROCESSED_ADLS",
+                    "type": "DatasetReference",
+                    "parameters": {
+                      "Location": {
+                        "value": "@pipeline().parameters.TargetObject",
+                        "type": "Expression"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "AT_SP_EndExecutionLog_Success_OnSP_Fail",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                  {
+                    "activity": "AT_SP_EndExecutionLog_Success",
+                    "dependencyConditions": [
+                      "Failed"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "storedProcedureName": "[EtlLog].[uspExecutionEndLogV1]",
+                  "storedProcedureParameters": {
+                    "ActivityName": {
+                      "value": "AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_PROCESSED",
+                      "type": "String"
+                    },
+                    "BatchDetailID": {
+                      "value": {
+                        "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "RulesApplied": {
+                      "value": {
+                        "value": "false",
+                        "type": "Expression"
+                      },
+                      "type": "Boolean"
+                    },
+                    "SourceName": {
+                      "value": {
+                        "value": "@pipeline().parameters.SourceName",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "SourceObject": {
+                      "value": {
+                        "value": "@pipeline().parameters.SourceObject",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "Status": {
+                      "value": "Succeeded",
+                      "type": "String"
+                    },
+                    "TargetObject": {
+                      "value": {
+                        "value": "@{concat(pipeline().parameters.TargetObject,'YYYY=',formatDateTime(UTCNOW(),'yyyy'))}/@{concat('MM=',formatDateTime(UTCNOW(),'MM'))}/@{concat('DD=',formatDateTime(UTCNOW(),'dd'))}",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "SourceRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "TargetRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "ErrorRowCount": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    }
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ASQL",
+                  "type": "LinkedServiceReference"
+                }
+              },
+              {
+                "name": "AT_SP_EndExecutionErrorLog",
+                "type": "SqlServerStoredProcedure",
+                "dependsOn": [
+                  {
+                    "activity": "AT_SP_EndExecutionLog_Failure",
+                    "dependencyConditions": [
+                      "Succeeded"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "storedProcedureName": "[EtlLog].[uspExecutionErrorLog]",
+                  "storedProcedureParameters": {
+                    "ActivityName": {
+                      "value": "AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_PROCESSED",
+                      "type": "String"
+                    },
+                    "BatchDetailID": {
+                      "value": {
+                        "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                        "type": "Expression"
+                      },
+                      "type": "Int32"
+                    },
+                    "DetailedErrorLocation": {
+                      "value": {
+                        "value": "@pipeline().parameters.sp_null",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "ErrorMessage": {
+                      "value": {
+                        "value": "@activity('AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_PROCESSED').Error.message",
+                        "type": "Expression"
+                      },
+                      "type": "String"
+                    },
+                    "JobType": {
+                      "value": "Copy",
+                      "type": "String"
+                    }
+                  }
+                },
+                "linkedServiceName": {
+                  "referenceName": "LS_ASQL",
+                  "type": "LinkedServiceReference"
+                }
+              },
+              {
+                "name": "AT_DEL_AURORA_TOPTIER_TGT_M_PSD",
+                "type": "Delete",
+                "dependsOn": [
+                  {
+                    "activity": "AT_CPY_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_PROCESSED",
+                    "dependencyConditions": [
+                      "Succeeded"
+                    ]
+                  }
+                ],
+                "policy": {
+                  "timeout": "7.00:00:00",
+                  "retry": 0,
+                  "retryIntervalInSeconds": 30,
+                  "secureOutput": false,
+                  "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                  "dataset": {
+                    "referenceName": "DS_CD_TOPTIER_TH_BLOB",
+                    "type": "DatasetReference",
+                    "parameters": {
+                      "FolderName": {
+                        "value": "@pipeline().parameters.FolderName",
+                        "type": "Expression"
+                      },
+                      "FileName": {
+                        "value": "@pipeline().parameters.FileName",
+                        "type": "Expression"
+                      },
+                      "SheetIndex": {
+                        "value": "@pipeline().parameters.SheetIndex",
+                        "type": "Expression"
+                      }
+                    }
+                  },
+                  "enableLogging": false,
+                  "storeSettings": {
+                    "type": "AzureBlobStorageReadSettings",
+                    "recursive": true,
+                    "enablePartitionDiscovery": false
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "AT_SP_EndBatchDetails",
+          "type": "SqlServerStoredProcedure",
+          "dependsOn": [
+            {
+              "activity": "AT_IF_ExecCheckProcessed",
+              "dependencyConditions": [
+                "Completed"
+              ]
+            }
+          ],
+          "policy": {
+            "timeout": "7.00:00:00",
+            "retry": 0,
+            "retryIntervalInSeconds": 30,
+            "secureOutput": false
+          },
+          "userProperties": [],
+          "typeProperties": {
+            "storedProcedureName": "[EtlLog].[uspBatchDetailEndLog]",
+            "storedProcedureParameters": {
+              "BatchDetailID": {
+                "value": {
+                  "value": "@activity('AT_LKP_InsertBatchDetails').output.firstRow.BatchDetailID",
+                  "type": "Expression"
+                },
+                "type": "Int32"
+              }
+            }
+          },
+          "linkedServiceName": {
+            "referenceName": "LS_ASQL",
+            "type": "LinkedServiceReference"
+          }
+        },
+        {
+          "name": "AT_LKP_InsertBatchDetails",
+          "description": "",
+          "type": "Lookup",
+          "dependsOn": [],
+          "policy": {
+            "timeout": "7.00:00:00",
+            "retry": 0,
+            "retryIntervalInSeconds": 30,
+            "secureOutput": false
+          },
+          "userProperties": [],
+          "typeProperties": {
+            "source": {
+              "type": "AzureSqlSource",
+              "sqlReaderStoredProcedureName": "[EtlLog].[uspBatchDetailStartLog]",
+              "storedProcedureParameters": {
+                "JobName": {
+                  "type": "String",
+                  "value": {
+                    "value": "@pipeline().Pipeline",
+                    "type": "Expression"
+                  }
+                },
+                "ParentBatchID": {
+                  "type": "Int32",
+                  "value": {
+                    "value": "@pipeline().parameters.ParentBatchId",
+                    "type": "Expression"
+                  }
+                },
+                "RunID": {
+                  "type": "Guid",
+                  "value": {
+                    "value": "@pipeline().RunId",
+                    "type": "Expression"
+                  }
+                },
+                "ToBeResume": {
+                  "type": "Boolean",
+                  "value": {
+                    "value": "@pipeline().parameters.ToBeResumed",
+                    "type": "Expression"
+                  }
+                }
+              },
+              "partitionOption": "None"
+            },
+            "dataset": {
+              "referenceName": "DS_SQL_BATCH_NEW",
+              "type": "DatasetReference"
+            }
+          }
+        }
+      ],
+      "parameters": {
+        "SliceStartTime": {
+          "type": "String",
+          "defaultValue": "2018-01-01"
+        },
+        "CustomSliceStart": {
+          "type": "Bool",
+          "defaultValue": false
+        },
+        "ToBeResumed": {
+          "type": "Bool",
+          "defaultValue": false
+        },
+        "ParentBatchId": {
+          "type": "Int",
+          "defaultValue": 1
+        },
+        "LoadType": {
+          "type": "String",
+          "defaultValue": "Full Refresh"
+        },
+        "PreviousSliceDateTime": {
+          "type": "String",
+          "defaultValue": "2018-01-02"
+        },
+        "sp_null": {
+          "type": "string",
+          "defaultValue": null
+        },
+        "SourceName": {
+          "type": "string",
+          "defaultValue": "TopTier"
+        },
+        "SourceObject": {
+          "type": "string",
+          "defaultValue": "unilever/UniversalDataLake/InternalSources/TopTier/BlobFileShare/TH/TargetMasterPSD/LandedFiles"
+        },
+        "TargetObject": {
+          "type": "string",
+          "defaultValue": "unilever/UniversalDataLake/InternalSources/TopTier/BlobFileShare/TH/TargetMasterPSD/Processed_Parquet"
+        },
+        "FileName": {
+          "type": "string",
+          "defaultValue": "ufstar_psd_nospread"
+        },
+        "FolderName": {
+          "type": "string",
+          "defaultValue": "targetmasterpsd"
+        },
+        "SheetIndex": {
+          "type": "string",
+          "defaultValue": "0"
+        }
+      },
+      "folder": {
+        "name": "TH_TopTier_Blob"
+      },
+      "annotations": [],
+      "lastPublishTime": "2023-02-03T04:34:41Z"
+    },
+    "type": "Microsoft.DataFactory/factories/pipelines"
+  },
+  {
+    "name": "TRG_CD_A_TOPTIER_TGT_MASTER_PSD_TH",
+    "properties": {
+      "annotations": [],
+      "runtimeState": "Stopped",
+      "pipelines": [
+        {
+          "pipelineReference": {
+            "referenceName": "PL_CD_A_AURORA_TH_TOPTIER_TGT_M_PSD_MASTER",
+            "type": "PipelineReference"
+          }
+        }
+      ],
+      "type": "BlobEventsTrigger",
+      "typeProperties": {
+        "blobPathBeginsWith": "/cd-aurora-th/blobs/toptier/targetmasterpsd/ufstar_psd_nospread.xlsx",
+        "ignoreEmptyBlobs": true,
+        "scope": "/subscriptions/7796e2b1-1c51-4a77-accf-3c035b59a22e/resourceGroups/bieno-da06-b-80066-rg/providers/Microsoft.Storage/storageAccounts/dbstorageda06b80066",
+        "events": [
+          "Microsoft.Storage.BlobCreated"
+        ]
+      }
+    }
+  }
+]
