@@ -5,6 +5,7 @@ Azure Data Factory pipelines to Databricks Lakeflow Python code.
 """
 
 from .orchestrator import Orchestrator
+from .run_converter import main as run_main, parse_args, run_with_args
 
 __version__ = "1.0.0"
-__all__ = ["Orchestrator"]
+__all__ = ["Orchestrator", "run_main", "parse_args", "run_with_args"]
