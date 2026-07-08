@@ -1,0 +1,12 @@
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
+langgraph>=0.2.0
+pydantic>=2.0.0
+azure-identity>=1.16.0
+azure-mgmt-datafactory>=9.0.0
+structlog>=24.0.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+pyspark>=3.5.0
+delta-spark>=3.1.0
