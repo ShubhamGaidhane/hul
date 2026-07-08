@@ -10,11 +10,11 @@ Usage:
     python run_converter.py --subscription-id <sub> --resource-group <rg> --factory-name <adf>
 
     # Run with explicit credentials
-    python run_converter.py --subscription-id <sub> --resource-group <rg> --factory-name <adf> \\
+    python run_converter.py --subscription-id <sub> --resource-group <rg> --factory-name <adf> \
         --tenant-id <tenant> --client-id <client> --client-secret <secret>
 
     # Run for specific pipelines only
-    python run_converter.py --subscription-id <sub> --resource-group <rg> --factory-name <adf> \\
+    python run_converter.py --subscription-id <sub> --resource-group <rg> --factory-name <adf> \
         --pipelines "PL_Master,PL_Child"
 
     # Run from a cached JSON file (no Azure connection needed)
@@ -32,17 +32,25 @@ from typing import Any, Dict, List, Optional
 
 # Load .env file if it exists (before any other imports)
 from dotenv import load_dotenv
-env_path = Path(__file__).resolve().parent / '.env'
+
+# Get the base directory safely
+try:
+    BASE_DIR = Path(__file__).resolve().parent.parent
+except NameError:
+    # Fallback for environments where __file__ is not defined (e.g. some notebooks)
+    BASE_DIR = Path(os.getcwd())
+
+env_path = BASE_DIR / "multi_agent_adf_converter" / ".env"
 if env_path.exists():
     load_dotenv(dotenv_path=str(env_path))
     print(f"📄 Loaded configuration from {env_path}")
 else:
-    # Try parent directory
-    parent_env = Path(__file__).resolve().parent.parent / '.env'
+    # Try current directory
+    parent_env = BASE_DIR / ".env"
     if parent_env.exists():
         load_dotenv(dotenv_path=str(parent_env))
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(BASE_DIR))
 
 from langchain_openai import ChatOpenAI
 
@@ -52,12 +60,54 @@ from multi_agent_adf_converter.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-def parse_args() -> argparse.Namespace:
+def is_databricks() -> bool:
+    """Check if running in a Databricks environment."""
+    return "DATABRICKS_RUNTIME_VERSION" in os.environ
+
+
+def get_dbutils():
+    """Get dbutils if running in Databricks."""
+    if is_databricks():
+        try:
+            from pyspark.dbutils import DBUtils
+            from pyspark.sql import SparkSession
+            spark = SparkSession.builder.getOrCreate()
+            return DBUtils(spark)
+        except (ImportError, NameError):
+            # Fallback for some Databricks environments
+            try:
+                import IPython
+                return IPython.get_ipython().user_ns.get("dbutils")
+            except (ImportError, AttributeError):
+                return None
+    return None
+
+
+def setup_dbutils_widgets():
+    """Setup Databricks widgets for the converter."""
+    dbutils = get_dbutils()
+    if dbutils:
+        dbutils.widgets.text("subscription_id", os.getenv("AZURE_SUBSCRIPTION_ID", ""), "Azure Subscription ID")
+        dbutils.widgets.text("resource_group", os.getenv("AZURE_RESOURCE_GROUP", ""), "Resource Group")
+        dbutils.widgets.text("factory_name", os.getenv("AZURE_ADF_FACTORY", ""), "ADF Factory Name")
+        dbutils.widgets.text("pipelines", "", "Pipelines (comma-separated)")
+        dbutils.widgets.text("output_dir", os.getenv("OUTPUT_DIR", "output"), "Output Directory")
+        dbutils.widgets.text("cache_dir", os.getenv("CACHE_DIR", "cache"), "Cache Directory")
+
+
+def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     """Parse command line arguments.
+
+    Args:
+        argv: Optional list of arguments to parse.
 
     Returns:
         Parsed arguments namespace.
     """
+    # Setup widgets if in Databricks
+    setup_dbutils_widgets()
+    dbutils = get_dbutils()
+
     parser = argparse.ArgumentParser(
         description="Multi-Agent ADF to Databricks Lakeflow Converter",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -129,6 +179,28 @@ def parse_args() -> argparse.Namespace:
         default=os.getenv("CACHE_DIR", "cache"),
         help="Directory for cache files",
     )
+
+    # If in Databricks, try to get values from widgets
+    if dbutils:
+        try:
+            widget_vals = {
+                "subscription_id": dbutils.widgets.get("subscription_id"),
+                "resource_group": dbutils.widgets.get("resource_group"),
+                "factory_name": dbutils.widgets.get("factory_name"),
+                "pipelines": dbutils.widgets.get("pipelines"),
+                "output_dir": dbutils.widgets.get("output_dir"),
+                "cache_dir": dbutils.widgets.get("cache_dir"),
+            }
+            # Set defaults for parser from widgets if they are provided
+            for key, val in widget_vals.items():
+                if val:
+                    arg_key = f"--{key.replace('_', '-')}"
+                    for action in parser._actions:
+                        if arg_key in action.option_strings:
+                            action.default = val
+        except Exception as e:
+            logger.warning(f"Failed to read Databricks widgets: {e}")
+
     parser.add_argument(
         "--max-retries",
         type=int,
@@ -146,7 +218,7 @@ def parse_args() -> argparse.Namespace:
         help="Path to log file (logs to stderr if not specified)",
     )
 
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def create_llm(args: argparse.Namespace) -> ChatOpenAI:
@@ -207,7 +279,18 @@ def main() -> int:
         Exit code (0 for success, 1 for error).
     """
     args = parse_args()
+    return run_with_args(args)
 
+
+def run_with_args(args: argparse.Namespace) -> int:
+    """Run the conversion with pre-parsed arguments.
+
+    Args:
+        args: Parsed command line arguments.
+
+    Returns:
+        Exit code (0 for success, 1 for error).
+    """
     # Resolve Azure configuration
     subscription_id = args.subscription_id or os.getenv("AZURE_SUBSCRIPTION_ID")
     resource_group = args.resource_group or os.getenv("AZURE_RESOURCE_GROUP")
