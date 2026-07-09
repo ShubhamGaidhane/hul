@@ -11,7 +11,7 @@ dbutils.library.restartPython()
 
 #Cell 2
 
-  from langchain_core.tools import tool
+from langchain_core.tools import tool
 # from langgraph.prebuilt import create_react_agent
 from deepagents import create_deep_agent
 from langchain_openai import ChatOpenAI
@@ -19,7 +19,7 @@ from langchain_openai import ChatOpenAI
 
 
 import time
-# import json
+import json
 # import os
 from collections import defaultdict
 import re
@@ -97,7 +97,6 @@ def normalize_parameters(params):
 
 
 def normalize_activity(act):
-
     raw = act.serialize()
     tp = raw.get("typeProperties", {})
 
@@ -108,6 +107,12 @@ def normalize_activity(act):
             getattr(act, "depends_on", None)
         )
     }
+
+    # Extract inputs/outputs if present (common for Copy, Lookup, etc.)
+    if hasattr(act, "inputs") and act.inputs:
+        base["inputs"] = [i.reference_name for i in act.inputs]
+    if hasattr(act, "outputs") and act.outputs:
+        base["outputs"] = [o.reference_name for o in act.outputs]
 
     if act.type == "DatabricksNotebook":
         base["config"] = {
@@ -127,6 +132,27 @@ def normalize_activity(act):
             "value": tp.get("value")
         }
 
+    elif act.type == "IfCondition":
+        base["if_true"] = [normalize_activity(a) for a in (act.if_true_activities or [])]
+        base["if_false"] = [normalize_activity(a) for a in (act.if_false_activities or [])]
+        base["config"] = tp
+
+    elif act.type == "ForEach":
+        base["activities"] = [normalize_activity(a) for a in (act.activities or [])]
+        base["config"] = tp
+
+    elif act.type == "Until":
+        base["activities"] = [normalize_activity(a) for a in (act.activities or [])]
+        base["config"] = tp
+
+    elif act.type == "Switch":
+        base["cases"] = [
+            {"value": c.value, "activities": [normalize_activity(a) for a in (c.activities or [])]}
+            for c in (act.cases or [])
+        ]
+        base["default_activities"] = [normalize_activity(a) for a in (act.default_activities or [])]
+        base["config"] = tp
+
     else:
         base["config"] = tp
 
@@ -135,108 +161,97 @@ def normalize_activity(act):
 
 class UnifiedADFScanner:
 
-    def __init__(self, subscription_id, tenant_id, client_id, client_secret):
+    def __init__(self):
+        # Configuration - ideally these would be parameters or from a secure config
+        self.tenant_id = "f66fae02-5d36-495b-bfe0-78a6ff9f8e6e"
+        self.client_id = "857458c3-549d-49dc-8e3a-993e71c1a011"
+        self.subscription_id = "8e017cde-1d7c-4842-a4a5-18f6c115cae3"
+        self.rg_name = "bieno-da08-d-80011-rg"
+        self.factory_name = dbutils.widgets.get("instance")
 
-        # Use Service Principal authentication
+        self.client_secret = dbutils.secrets.get(
+            "databrickskv01",
+            "svc-b-da-d-80011-ina-aadprincipal"
+        )
+
         self.credential = ClientSecretCredential(
-            tenant_id=tenant_id,
-            client_id=client_id,
-            client_secret=client_secret
+            tenant_id=self.tenant_id,
+            client_id=self.client_id,
+            client_secret=self.client_secret
         )
 
         self.client = DataFactoryManagementClient(
             self.credential,
-            subscription_id
+            self.subscription_id
         )
 
-        self.catalog = {
-            "pipelines": [],
-            "linked_services": [],
-            "triggers": [],
-            "datasets": [],
-            "integration_runtimes": []
-        }
+    def _find_execute_pipeline_names(self, activities):
+        names = []
+        for act in (activities or []):
+            if act.type == "ExecutePipeline":
+                if hasattr(act, "pipeline") and act.pipeline:
+                    names.append(act.pipeline.reference_name)
 
-        self.lineage_map = defaultdict(list)
+            # Recurse into nested activities
+            if act.type == "IfCondition":
+                names.extend(self._find_execute_pipeline_names(act.if_true_activities))
+                names.extend(self._find_execute_pipeline_names(act.if_false_activities))
+            elif act.type in ["ForEach", "Until"]:
+                names.extend(self._find_execute_pipeline_names(act.activities))
+            elif act.type == "Switch":
+                for case in (act.cases or []):
+                    names.extend(self._find_execute_pipeline_names(case.activities))
+                names.extend(self._find_execute_pipeline_names(act.default_activities))
+        return names
 
-    # --------------------------------------------------
-    # PIPELINE SCAN
-    # --------------------------------------------------
-    def collect_pipeline_insights(self, rg_name, factory_name, pipeline_names=None):
+    def get_pipeline_hierarchy(self, root_pipeline_name):
+        to_process = [root_pipeline_name]
+        seen = set()
+        hierarchy = []
+
+        while to_process:
+            current = to_process.pop(0)
+            if current in seen:
+                continue
+            seen.add(current)
+            hierarchy.append(current)
+
+            try:
+                pipe = self.client.pipelines.get(self.rg_name, self.factory_name, current)
+                child_names = self._find_execute_pipeline_names(pipe.activities)
+                for cn in child_names:
+                    if cn not in seen:
+                        to_process.append(cn)
+            except Exception as e:
+                print(f"⚠️ Failed to fetch pipeline {current}: {e}")
+
+        return hierarchy
+
+    def get_pipeline_details(self, pipeline_names):
         results = []
+        for name in pipeline_names:
+            try:
+                pipe = self.client.pipelines.get(self.rg_name, self.factory_name, name)
+                activities = pipe.activities or []
+                activity_details = [normalize_activity(act) for act in activities]
                 
-        # ✅ If specific pipelines passed
-        if pipeline_names:
-            pipelines = []
-            for name in pipeline_names:
-                try:
-                    pipe = self.client.pipelines.get(rg_name, factory_name, name)
-                    pipelines.append(pipe)
-                except Exception as e:
-                    print(f"⚠️ Failed to fetch pipeline {name}: {e}")
-        else:
-            # ✅ Existing behavior (all pipelines)
-            pipelines = self.client.pipelines.list_by_factory(rg_name, factory_name)
-
-
-        for pipe in pipelines:
-            activities = pipe.activities or []
-
-            activity_details = []
-            dependencies = []
-
-            for act in activities:
-                activity_details.append(normalize_activity(act)) #activity_details.append(act.serialize())
-
-                dependencies.append({
-                    "activity": act.name,
-                    "depends_on": normalize_dependencies(getattr(act, "depends_on", None))
+                results.append({
+                    "asset_type": "pipeline",
+                    "pipeline": pipe.name,
+                    "activities": activity_details,
+                    "parameters": normalize_parameters(pipe.parameters),
+                    "variables": list(pipe.variables.keys()) if pipe.variables else [],
                 })
+            except Exception as e:
+                print(f"⚠️ Failed to fetch pipeline {name}: {e}")
+        return results
 
-                # Lineage
-                if hasattr(act, "inputs") and act.inputs:
-                    for i in act.inputs:
-                        self.lineage_map[pipe.name].append(
-                            ("dataset", i.reference_name)
-                        )
-
-                if hasattr(act, "outputs") and act.outputs:
-                    for o in act.outputs:
-                        self.lineage_map[pipe.name].append(
-                            ("dataset", o.reference_name)
-                        )
-
-                if act.type == "ExecutePipeline":
-                    if hasattr(act, "pipeline") and act.pipeline:
-                        ref = act.pipeline.reference_name
-                        self.lineage_map[pipe.name].append(
-                            ("pipeline", ref)
-                        )
-
-            results.append({
-                "asset_type": "pipeline",
-                "factory": factory_name,
-                "pipeline": pipe.name,
-                "activity_count": len(activities),
-                "activity_kinds": list({a.type for a in activities}),
-                "activities_detail": activity_details,
-                "dependencies": dependencies,
-                "parameters": normalize_parameters(pipe.parameters),
-                "variables": list(pipe.variables.keys()) if pipe.variables else [],
-                #"definition": pipe.as_dict(),
-                "captured_at": time.time()
-            })
-
-        self.catalog["pipelines"] = results
-
-    # --------------------------------------------------
-    # DATASET SCAN
-    # --------------------------------------------------
-    def collect_datasets(self, rg_name, factory_name):
-            datasets = []
-
-            for ds in self.client.datasets.list_by_factory(rg_name, factory_name):
-                datasets.append({
+    def get_dataset_details(self, dataset_names):
+        results = []
+        for name in dataset_names:
+            try:
+                ds = self.client.datasets.get(self.rg_name, self.factory_name, name)
+                results.append({
                     "asset_type": "dataset",
                     "name": ds.name,
                     "type": ds.properties.type,
@@ -245,150 +260,144 @@ class UnifiedADFScanner:
                         if ds.properties.linked_service_name else None
                     ),
                     "schema": getattr(ds.properties, "schema", None),
-                    #"definition": ds.as_dict(),
-                    "captured_at": time.time()
+                    "properties": ds.properties.serialize()
                 })
+            except Exception as e:
+                print(f"⚠️ Failed to fetch dataset {name}: {e}")
+        return results
 
-            self.catalog["datasets"] = datasets
-
-    # --------------------------------------------------
-    # LINKED SERVICES
-    # --------------------------------------------------
-    def collect_linked_service_info(self, rg_name, factory_name):
+    def get_linked_service_details(self, ls_names):
         results = []
+        for name in ls_names:
+            try:
+                svc = self.client.linked_services.get(self.rg_name, self.factory_name, name)
+                results.append({
+                    "asset_type": "linked_service",
+                    "name": svc.name,
+                    "type": svc.properties.type,
+                    "definition": svc.serialize()
+                })
+            except Exception as e:
+                print(f"⚠️ Failed to fetch linked service {name}: {e}")
+        return results
 
-        for svc in self.client.linked_services.list_by_factory(rg_name, factory_name):
-            raw_data = str(svc.serialize())
-
-            results.append({
-                "asset_type": "linked_service",
-                "name": svc.name,
-                "service_kind": svc.properties.type,
-                "uses_key_vault": "AzureKeyVault" in raw_data,
-                "definition": svc.serialize(),
-                "captured_at": time.time()
-            })
-
-        self.catalog["linked_services"] = results
-
-    # --------------------------------------------------
-    # TRIGGERS
-    # --------------------------------------------------
-    def collect_trigger_info(self, rg_name, factory_name):
+    def get_trigger_details(self, pipeline_names):
         results = []
-
-        for trig in self.client.triggers.list_by_factory(rg_name, factory_name):
-            pipelines = []
-            if trig.properties.pipelines:
-                pipelines = [
-                    p.pipeline_reference.reference_name
-                    for p in trig.properties.pipelines
-                ]
-
-            results.append({
-                "asset_type": "trigger",
-                "name": trig.name,
-                "trigger_kind": trig.properties.type,
-                "status": trig.properties.runtime_state,
-                "linked_pipelines": pipelines,
-                "schedule": getattr(trig.properties, "type_properties", {}),
-                "definition": trig.serialize(),
-                "captured_at": time.time()
-            })
-
-        self.catalog["triggers"] = results
-
-    # --------------------------------------------------
-    # INTEGRATION RUNTIMES
-    # --------------------------------------------------
-    def collect_integration_runtimes(self, rg_name, factory_name):
-        irs = []
-
-        for ir in self.client.integration_runtimes.list_by_factory(rg_name, factory_name):
-            detail = self.client.integration_runtimes.get(rg_name, factory_name, ir.name)
-
-            irs.append({
-                "asset_type": "integration_runtime",
-                "name": ir.name,
-                "type": detail.properties.type if detail.properties else "Unknown",
-                "definition": detail.serialize(),
-                "captured_at": time.time()
-            })
-
-        self.catalog["integration_runtimes"] = irs
-
-    # --------------------------------------------------
-    # FULL SCAN
-    # --------------------------------------------------
-    def execute_full_scan(self, rg_name, factory_name, pipeline_names=None):
-
-        print(f"Starting ADF discovery for: {factory_name}")
-
-        self.collect_pipeline_insights(rg_name, factory_name, pipeline_names)
-        self.collect_datasets(rg_name, factory_name)
-        self.collect_linked_service_info(rg_name, factory_name)
-        self.collect_trigger_info(rg_name, factory_name)
-        self.collect_integration_runtimes(rg_name, factory_name)
-
-        print(f"done the scan")
-
-        return {
-            "catalog": self.catalog,
-            "lineage": dict(self.lineage_map)
-        }
+        try:
+            all_triggers = self.client.triggers.list_by_factory(self.rg_name, self.factory_name)
+            for trig in all_triggers:
+                trig_pipelines = [p.pipeline_reference.reference_name for p in (trig.properties.pipelines or [])]
+                # Check if this trigger is associated with any of the requested pipelines
+                if any(p in pipeline_names for p in trig_pipelines):
+                    results.append({
+                        "asset_type": "trigger",
+                        "name": trig.name,
+                        "type": trig.properties.type,
+                        "status": trig.properties.runtime_state,
+                        "linked_pipelines": trig_pipelines,
+                        "definition": trig.serialize()
+                    })
+        except Exception as e:
+            print(f"⚠️ Failed to fetch triggers: {e}")
+        return results
 
 
-from langchain_core.tools import tool
+@tool
+def discover_child_pipelines(pipeline_name: str):
+    """
+    Given a root pipeline name, recursively identifies all child pipelines called via ExecutePipeline activities (including nested ones).
+    Returns a list of all unique pipeline names in the hierarchy.
+    """
+    scanner = UnifiedADFScanner()
+    return scanner.get_pipeline_hierarchy(pipeline_name)
+
+@tool
+def get_pipeline_details(pipeline_names: list):
+    """
+    Fetches detailed metadata for a list of ADF pipelines, including activities, parameters, and variables.
+    """
+    scanner = UnifiedADFScanner()
+    return scanner.get_pipeline_details(pipeline_names)
+
+@tool
+def get_dataset_details(dataset_names: list):
+    """
+    Fetches detailed metadata for a list of ADF datasets, including their types, linked services, and properties.
+    """
+    scanner = UnifiedADFScanner()
+    return scanner.get_dataset_details(dataset_names)
+
+@tool
+def get_linked_service_details(ls_names: list):
+    """
+    Fetches detailed metadata for a list of ADF linked services, including connection definitions.
+    """
+    scanner = UnifiedADFScanner()
+    return scanner.get_linked_service_details(ls_names)
+
+@tool
+def get_trigger_details(pipeline_names: list):
+    """
+    Fetches details of all triggers associated with the specified list of pipelines.
+    """
+    scanner = UnifiedADFScanner()
+    return scanner.get_trigger_details(pipeline_names)
 
 @tool
 def get_pipeline_metadata():
     """
-    Get ADF pipeline metadata using notebook parameters.
+    Legacy tool to get ADF metadata for pipelines specified in notebook widgets.
+    If 'pipelines' widget is empty, it scans all pipelines in the factory.
     """
-
-    tenant_id = "f66fae02-5d36-495b-bfe0-78a6ff9f8e6e"
-    client_id = "857458c3-549d-49dc-8e3a-993e71c1a011"
-
-    client_secret = dbutils.secrets.get(
-        "databrickskv01",
-        "svc-b-da-d-80011-ina-aadprincipal"
-    )
-
-    subscription_id = "8e017cde-1d7c-4842-a4a5-18f6c115cae3"
-    rg_name = "bieno-da08-d-80011-rg"
-
-    # Read notebook parameters
-    # factory_name = dbutils.widgets.get("factory_name")
-    factory_name = dbutils.widgets.get("instance" )  
-    
-
-    # pipeline_names_str = dbutils.widgets.get("pipeline_names")
+    scanner = UnifiedADFScanner()
     pipeline_names_str = dbutils.widgets.get("pipelines")
 
-    pipeline_names = (
-        [p.strip() for p in pipeline_names_str.split(",")]
-        if pipeline_names_str
-        else None
-    )
+    if not pipeline_names_str:
+        # Restore "scan all" functionality
+        all_pipes = scanner.client.pipelines.list_by_factory(scanner.rg_name, scanner.factory_name)
+        pipeline_names = [p.name for p in all_pipes]
+    else:
+        pipeline_names = [p.strip() for p in pipeline_names_str.split(",")]
 
-    scanner = UnifiedADFScanner(
-        subscription_id,
-        tenant_id,
-        client_id,
-        client_secret
-    )
+    all_pipelines_in_hierarchy = []
+    for p in pipeline_names:
+        all_pipelines_in_hierarchy.extend(scanner.get_pipeline_hierarchy(p))
 
-    scanner.execute_full_scan(
-        rg_name,
-        factory_name,
-        pipeline_names
-    )
+    unique_pipelines = list(set(all_pipelines_in_hierarchy))
 
-    # return scanner.catalog["pipelines"]
-    return scanner.catalog
+    results = {
+        "pipelines": scanner.get_pipeline_details(unique_pipelines),
+        "triggers": scanner.get_trigger_details(unique_pipelines)
+    }
 
+    # Recursively collect all datasets from all activities (including nested ones)
+    def collect_datasets(activities):
+        ds = set()
+        for act in activities:
+            if "inputs" in act: ds.update(act["inputs"])
+            if "outputs" in act: ds.update(act["outputs"])
+            if "if_true" in act: ds.update(collect_datasets(act["if_true"]))
+            if "if_false" in act: ds.update(collect_datasets(act["if_false"]))
+            if "activities" in act: ds.update(collect_datasets(act["activities"]))
+            if "cases" in act:
+                for case in act["cases"]:
+                    ds.update(collect_datasets(case["activities"]))
+            if "default_activities" in act: ds.update(collect_datasets(act["default_activities"]))
+        return ds
 
+    all_ds_names = set()
+    for p in results["pipelines"]:
+        all_ds_names.update(collect_datasets(p["activities"]))
 
+    results["datasets"] = scanner.get_dataset_details(list(all_ds_names))
+
+    ls_names = set()
+    for ds in results["datasets"]:
+        if ds["linked_service"]: ls_names.add(ds["linked_service"])
+
+    results["linked_services"] = scanner.get_linked_service_details(list(ls_names))
+
+    return results
 
    
 SYSTEM_PROMPT = """
@@ -399,70 +408,43 @@ Convert ADF pipelines into equivalent Databricks Lakeflow code.
 
 Tool Usage Rules:
 
-Available tool:
-get_pipeline_metadata
-
-Always call get_pipeline_metadata before generating conversion code.
-
-1. Always call the available metadata tool before generating any conversion code.
-
-2. Read all the child pipelines, linked services, datasets, trigger ect for each pipeline.
-
-3. Use only metadata returned by the tool.
-
-4. Never skip tool usage when pipeline information is required.
+1. Start by calling `discover_child_pipelines` for the main pipeline(s) to identify the full hierarchy.
+2. Call `get_pipeline_details` for all identified pipelines.
+3. Identify all datasets and linked services from the pipeline activities (check inputs and outputs).
+4. Call `get_dataset_details` and `get_linked_service_details` to get their configurations.
+5. Call `get_trigger_details` for the pipelines.
+6. Use all gathered metadata to generate the conversion code.
 
 Conversion Rules:
 
 1. Convert ADF activities into equivalent Databricks Lakeflow patterns.
-
-2. Use Auto Loader wherever applicable.
-
+2. Use Auto Loader wherever applicable for ingestion.
 3. Preserve activity dependencies and execution order.
-
-4. Preserve pipeline parameters and variables wherever possible.
-
-5. Preserve lineage information whenever available.
-
-6. convert all the linked services, datasets
-
-7. Add trigger details of each pipeline (Type and Time)
-
-8. Always write to deltalake table in processed layer
-
+4. Preserve pipeline parameters and variables.
+5. Convert all linked services and datasets to Databricks configurations (e.g., secret scopes, catalog locations).
+6. Include trigger details (Type and Schedule) in the converted code or documentation.
+7. Always write to Delta tables in the processed layer.
 
 Guardrails:
-
-1. Never invent:
-   - pipelines
-   - datasets
-   - linked services
-   - activities
-   - parameters
-
-2. Never generate conversion code if metadata is unavailable.
-
-3. Never expose credentials, secrets, API keys, passwords, or connection strings.
-
-4. If an ADF component is unsupported, generate a TODO comment instead of guessing.
+1. Never invent metadata.
+2. Never expose credentials.
+3. Use TODO comments for unsupported components.
 
 Output Rules:
-
-1. Return only executable Databricks code.
-
-2. Do not provide explanations.
-
-3. Do not provide markdown formatting.
-
-4. Do not provide introductory text.
-
-Return only the converted code.
+1. Return only executable Databricks code within the requested dictionary format.
+2. Do not provide explanations outside the dictionary.
 """
 
 agent = create_deep_agent(
     model=llm,
     system_prompt=SYSTEM_PROMPT,
-    tools=[get_pipeline_metadata],
+    tools=[
+        discover_child_pipelines,
+        get_pipeline_details,
+        get_dataset_details,
+        get_linked_service_details,
+        get_trigger_details
+    ],
     skills=["/SKILLS"]
 )
 
@@ -471,94 +453,26 @@ agent = create_deep_agent(
 
 
 prompt = f"""
-Convert the given ADF pipeline/code(parent and child) to Databricks Lakeflow using Auto Loader.
+Convert the given ADF pipeline hierarchy (parent and child) to Databricks Lakeflow using Auto Loader.
 
-Use {ADF_fuc_to_call} to extract all required ADF metadata, childpipelines, configurations, dependencies, and connection details.
-CRITICAL VALIDATION REQUIREMENTS
+Starting pipeline(s): {pipelines}
 
-Do not perform a code-only conversion. Before generating the Databricks notebook, fully analyze all ADF artifacts associated with the pipeline and verify that every dependency is accounted for. we need mater, landed and processed (parent and child) all the pipelines converted into a single notebook.
+Follow these steps:
+1. Discover all child pipelines.
+2. Get details for all pipelines in the hierarchy.
+3. Get details for all referenced datasets and linked services.
+4. Get trigger details.
+5. Generate the Lakeflow code.
 
-The conversion must include and document:
+The conversion must include:
+1. Pipeline Logic (Activities, Dependencies, Conditions)
+2. Parameters & Variables
+3. Linked Service Mapping
+4. Dataset Mapping
+5. Trigger Semantics
+6. Fidelity Validation and Artifact Coverage Report
 
-1. Pipeline Logic
-   - Activities
-   - Dependencies
-   - Conditions (If, Switch, Until, ForEach)
-   - Wait activities
-   - Error handling paths
-   - Retry policies
-   - Timeout settings
-
-2. Pipeline Parameters
-   - Preserve parameter names
-   - Preserve default values
-   - Preserve runtime expressions
-   - Preserve trigger-driven parameters
-
-3. Linked Services
-   - Identify every linked service used directly or indirectly by the pipeline
-   - Include linked services referenced through datasets
-   - Capture connection type, authentication method, Integration Runtime, Key Vault references, Managed Identity usage, and network dependencies
-   - Produce a Linked Service Mapping section showing:
-     ADF Linked Service -> Databricks Equivalent
-
-4. Datasets
-   - Identify all datasets used by activities
-   - Capture source and target objects
-   - Capture dataset parameters
-   - Capture schemas, file formats, paths, and linked service references
-   - Produce a Dataset Mapping section showing:
-     ADF Dataset -> Databricks Implementation
-
-5. Triggers
-   - Detect all triggers associated with the pipeline
-   - Preserve TriggerTime semantics
-   - Preserve schedule, tumbling window, event-based, or manual trigger behavior
-   - Ensure ADF RunId and Trigger metadata are passed into Databricks jobs where required
-
-6. Child Pipeline Dependencies
-   - Identify all ExecutePipeline activities
-   - List all dependent pipelines
-   - Verify parameter mappings between parent and child pipelines
-   - Report any child pipelines that have not yet been converted
-
-7. Integration Runtime Analysis
-   - Identify any Azure IR or Self-Hosted IR dependencies
-   - Highlight connectivity, VPN, private endpoint, firewall, or on-premises access requirements
-   - Flag migration risks if Databricks cannot access the same resources
-
-8. Artifact Coverage Report
-   For every conversion provide a summary table:
-
-   - Pipeline Activities
-   - Parameters
-   - Variables
-   - Linked Services
-   - Datasets
-   - Triggers
-   - Integration Runtimes
-   - Child Pipelines
-   - Stored Procedures
-   - Source Systems
-   - Sink Systems
-
-   Mark each as:
-   - Fully Migrated
-   - Partially Migrated
-   - Not Migrated
-
-9. Fidelity Validation
-   Compare the generated Databricks notebook against the original ADF pipeline and explicitly identify:
-   - Missing logic
-   - Added logic
-   - Changed behavior
-   - Assumptions made during conversion
-   - Potential migration risks
-
-10. Do Not Invent Logic
-    Do not introduce new processing, ingestion, transformations, Delta writes, Auto Loader logic, audit tables, metadata tables, or lineage tracking unless they exist in the source ADF solution or are explicitly requested. Any added functionality must be clearly marked as "Enhancement" rather than "Migration".
-
-11. Return the output as a Python dictionary in the following format:
+Return the output as a Python dictionary in the following format:
 
 {{
     "lineage": {{
@@ -571,10 +485,8 @@ The conversion must include and document:
 }}
 
 Rules:
-- Extract and populate lineage information from the ADF metadata.
-- Generate equivalent Lakeflow code using Auto Loader.
 - Return only the dictionary.
-- Do not include explanations, markdown, comments, or additional text outside the dictionary.
+- Do not include explanations or markdown outside the dictionary.
 """
 
 
@@ -599,11 +511,15 @@ result = response["messages"][-1].content
 
 # If agent returns a JSON string
 if isinstance(result, str):
-    result = json.loads(result)
-
-# &&&&&&&&&&&&&&&&&
-
-
+    try:
+        # Try to find JSON block if the agent included some text despite instructions
+        match = re.search(r'\{.*\}', result, re.DOTALL)
+        if match:
+            result = json.loads(match.group())
+        else:
+            result = json.loads(result)
+    except:
+        result = {"converted_code": result, "lineage": {}}
 
 # Get converted code
 converted_code = result.get("converted_code", "")
@@ -612,23 +528,24 @@ converted_code = result.get("converted_code", "")
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 # Target file path
-file_path = f"abfss://unilever@dbstorageda08d80011adls.dfs.core.windows.net/UniversalDataLake/InternalSources/TopTier/BlobFileShare/TH/Auto_loader_test/source/generated_script_{pipelines}_{timestamp}.py"
+main_pipeline = pipelines.split(",")[0]
+file_path = f"abfss://unilever@dbstorageda08d80011adls.dfs.core.windows.net/UniversalDataLake/InternalSources/TopTier/BlobFileShare/TH/Auto_loader_test/source/generated_script_{main_pipeline}_{timestamp}.py"
 
 # Write code to ADLS
-dbutils.fs.put(
-    file_path,
-    converted_code,
-    overwrite=True
-)
-
-print(f"File saved at: {file_path}") 
-
-
-##################
-
-
-
-
+try:
+    dbutils.fs.put(
+        file_path,
+        converted_code,
+        overwrite=True
+    )
+    print(f"File saved at: {file_path}")
+except Exception as e:
+    print(f"Failed to save to ADLS: {e}")
+    # Fallback to local /tmp
+    local_path = f"/tmp/generated_script_{main_pipeline}_{timestamp}.py"
+    with open(local_path, "w") as f:
+        f.write(converted_code)
+    print(f"File saved locally at: {local_path}")
 
 
 # Return everything to Streamlit
@@ -638,6 +555,3 @@ output = {
 }
 
 dbutils.notebook.exit(json.dumps(output))
-
-
-
