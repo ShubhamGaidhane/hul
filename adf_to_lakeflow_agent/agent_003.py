@@ -1,7 +1,7 @@
 
 #cell 1
 %pip install azure-identity azure-mgmt-datafactory
-%pip install langchain langchain-openai
+%pip install langchain langchain-anthropic
 %pip install -U deepagents
 
 
@@ -13,7 +13,7 @@ dbutils.library.restartPython()
 
 from langchain_core.tools import tool
 from deepagents import create_deep_agent
-from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
 
 import time
 import json
@@ -43,16 +43,15 @@ client_id = dbutils.widgets.get("client_id")
 
 # Security: retrieve API key from secret scope
 try:
-    api_key = dbutils.secrets.get("databrickskv01", "llm-api-key")
+    api_key = dbutils.secrets.get("databrickskv01", "anthropic-api-key")
 except Exception:
-    raise ValueError("LLM API Key not found. Please configure 'llm-api-key' in 'databrickskv01' secret scope.")
+    # Use placeholder or raise error if required secret is missing
+    raise ValueError("Anthropic API Key not found. Please configure 'anthropic-api-key' in 'databrickskv01' secret scope.")
 
-llm = ChatOpenAI(
-    model="openai.gpt-5-mini",
-    base_url="https://openai.generative.engine.capgemini.com/v1",
-    api_key=api_key,
-    default_headers={"x-api-key": api_key},
-    temperature=0.1,
+llm = ChatAnthropic(
+    model="claude-sonnet-4-20250514",
+    anthropic_api_key=api_key,
+    base_url="https://anthropic.generative-eu.engine.capgemini.com",
 )
 
 def normalize_dependencies(dep_list):
@@ -207,7 +206,6 @@ class UnifiedADFScanner:
         except Exception as e: results.append({"error": f"Failed to list triggers: {str(e)}"})
         return results
 
-# Internal helper to perform metadata extraction for a list of pipelines
 def get_pipeline_metadata_internal(pipeline_names):
     scanner = UnifiedADFScanner()
     print(f"Fetching metadata for: {pipeline_names}")
