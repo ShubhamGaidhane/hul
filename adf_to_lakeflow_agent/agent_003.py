@@ -44,10 +44,14 @@ client_id = dbutils.widgets.get("client_id")
 # Security: retrieve API key from secret scope
 try:
     api_key = dbutils.secrets.get("databrickskv01", "anthropic-api-key")
+    # Robust check to ensure api_key is a plain string and not a tuple
+    if isinstance(api_key, (list, tuple)):
+        api_key = api_key[0]
+    api_key = str(api_key).strip()
 except Exception:
-    # Use placeholder or raise error if required secret is missing
     raise ValueError("Anthropic API Key not found. Please configure 'anthropic-api-key' in 'databrickskv01' secret scope.")
 
+# Correct initialization of ChatAnthropic
 llm = ChatAnthropic(
     model="claude-sonnet-4-20250514",
     anthropic_api_key=api_key,
@@ -206,6 +210,7 @@ class UnifiedADFScanner:
         except Exception as e: results.append({"error": f"Failed to list triggers: {str(e)}"})
         return results
 
+# Internal helper to perform metadata extraction for a list of pipelines
 def get_pipeline_metadata_internal(pipeline_names):
     scanner = UnifiedADFScanner()
     print(f"Fetching metadata for: {pipeline_names}")
@@ -243,7 +248,7 @@ def get_pipeline_hierarchy_and_metadata(pipeline_names: str):
     """
     REQUIRED TOOL. Extracts all child pipelines for the given pipeline(s)
     and then fetches complete metadata (activities, datasets, linked services, triggers)
-    for the entire hierarchy by passing them to the metadata extraction logic.
+    for the entire hierarchy.
     """
     scanner = UnifiedADFScanner()
     print(f"Discovering hierarchy for: {pipeline_names}")
@@ -255,7 +260,6 @@ def get_pipeline_hierarchy_and_metadata(pipeline_names: str):
 def get_pipeline_metadata(pipeline_names: list):
     """
     Fetches full metadata for a SPECIFIC list of pipeline names.
-    Use this if you already have the list of pipelines.
     """
     return get_pipeline_metadata_internal(pipeline_names)
 
