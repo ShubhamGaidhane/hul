@@ -20,11 +20,11 @@ import json
 from collections import defaultdict
 import re
 from datetime import datetime
- 
+
 from azure.identity import ClientSecretCredential
 from azure.mgmt.datafactory import DataFactoryManagementClient
 
-# Setup widgets for environment configuration
+# Setup widgets
 dbutils.widgets.text("department", "")
 dbutils.widgets.text("instance", "bieno-da08-d-80011-adf-hr-01")
 dbutils.widgets.text("pipelines", "PL_HR_D_TEAMENERGY_GBL_W2MODULES_MASTER")
@@ -41,11 +41,11 @@ resource_group = dbutils.widgets.get("resource_group")
 tenant_id = dbutils.widgets.get("tenant_id")
 client_id = dbutils.widgets.get("client_id")
 
-# Security best practice: retrieve sensitive keys from secret scope
+# Security: retrieve API key from secret scope
 try:
     api_key = dbutils.secrets.get("databrickskv01", "llm-api-key")
 except Exception:
-    raise ValueError("LLM API Key not found in secret scope 'databrickskv01' with name 'llm-api-key'. Please ensure it is configured.")
+    raise ValueError("LLM API Key not found. Please configure 'llm-api-key' in 'databrickskv01' secret scope.")
 
 llm = ChatOpenAI(
     model="openai.gpt-5-mini",
@@ -207,81 +207,9 @@ class UnifiedADFScanner:
         except Exception as e: results.append({"error": f"Failed to list triggers: {str(e)}"})
         return results
 
-@tool
-def discover_child_pipelines(pipeline_names: str):
-    """
-    Identifies all child pipelines for the given pipeline(s) recursively.
-    Accepts a single pipeline name or a comma-separated string of names.
-    Returns a list of all pipelines found in the hierarchy.
-    """
-    print(f"Tool discover_child_pipelines called with: {pipeline_names}")
-    try:
-        scanner = UnifiedADFScanner()
-        res = scanner.get_pipeline_hierarchy(pipeline_names)
-        print(f"Discovered: {res}")
-        return res
-    except Exception as e:
-        return f"Error: {str(e)}"
-
-@tool
-def get_pipeline_details(pipeline_names: list):
-    """
-    Fetches activities, parameters, and variables for a LIST of pipeline names.
-    """
-    print(f"Tool get_pipeline_details called with: {pipeline_names}")
-    try:
-        scanner = UnifiedADFScanner()
-        return scanner.get_pipeline_details(pipeline_names)
-    except Exception as e:
-        return f"Error: {str(e)}"
-
-@tool
-def get_dataset_details(dataset_names: list):
-    """
-    Fetches connection properties and schemas for a LIST of dataset names.
-    """
-    print(f"Tool get_dataset_details called with: {dataset_names}")
-    try:
-        scanner = UnifiedADFScanner()
-        return scanner.get_dataset_details(dataset_names)
-    except Exception as e:
-        return f"Error: {str(e)}"
-
-@tool
-def get_linked_service_details(ls_names: list):
-    """
-    Fetches connection definitions for a LIST of linked service names.
-    """
-    print(f"Tool get_linked_service_details called with: {ls_names}")
-    try:
-        scanner = UnifiedADFScanner()
-        return scanner.get_linked_service_details(ls_names)
-    except Exception as e:
-        return f"Error: {str(e)}"
-
-@tool
-def get_trigger_details(pipeline_names: list):
-    """
-    Fetches trigger schedules and types for a LIST of pipeline names.
-    """
-    print(f"Tool get_trigger_details called with: {pipeline_names}")
-    try:
-        scanner = UnifiedADFScanner()
-        return scanner.get_trigger_details(pipeline_names)
-    except Exception as e:
-        return f"Error: {str(e)}"
-
-@tool
-def get_pipeline_metadata(pipeline_names: list = None):
-    """
-    Fetches full metadata (activities, datasets, linked services, triggers) for a list of pipelines.
-    If no pipeline names are provided, it uses the 'pipelines' widget.
-    """
+# Internal helper to perform metadata extraction for a list of pipelines
+def get_pipeline_metadata_internal(pipeline_names):
     scanner = UnifiedADFScanner()
-    if not pipeline_names:
-        pipeline_names_str = dbutils.widgets.get("pipelines")
-        pipeline_names = [p.strip() for p in pipeline_names_str.split(",")] if pipeline_names_str else []
-
     print(f"Fetching metadata for: {pipeline_names}")
     results = {
         "pipelines": scanner.get_pipeline_details(pipeline_names),
@@ -310,24 +238,43 @@ def get_pipeline_metadata(pipeline_names: list = None):
     for ds in results["datasets"]:
         if "linked_service" in ds and ds["linked_service"]: ls_names.add(ds["linked_service"])
     results["linked_services"] = scanner.get_linked_service_details(list(ls_names))
-
     return results
+
+@tool
+def get_pipeline_hierarchy_and_metadata(pipeline_names: str):
+    """
+    REQUIRED TOOL. Extracts all child pipelines for the given pipeline(s)
+    and then fetches complete metadata (activities, datasets, linked services, triggers)
+    for the entire hierarchy by passing them to the metadata extraction logic.
+    """
+    scanner = UnifiedADFScanner()
+    print(f"Discovering hierarchy for: {pipeline_names}")
+    hierarchy = scanner.get_pipeline_hierarchy(pipeline_names)
+    print(f"Full hierarchy: {hierarchy}")
+    return get_pipeline_metadata_internal(hierarchy)
+
+@tool
+def get_pipeline_metadata(pipeline_names: list):
+    """
+    Fetches full metadata for a SPECIFIC list of pipeline names.
+    Use this if you already have the list of pipelines.
+    """
+    return get_pipeline_metadata_internal(pipeline_names)
 
 SYSTEM_PROMPT = """
 You are a highly skilled ADF-to-Databricks Migration Engineer.
 Your task is to convert ADF pipelines into Databricks Lakeflow code using Auto Loader.
 
 CRITICAL INSTRUCTIONS:
-1. Always call `discover_child_pipelines` first to identify the full hierarchy.
-2. Call `get_pipeline_metadata` with the COMPLETE list of pipelines discovered.
-3. Generate equivalent Databricks Lakeflow code using Auto Loader and Delta Lake.
-4. Output only a Python dictionary with 'lineage' and 'converted_code'.
+1. Always start by calling `get_pipeline_hierarchy_and_metadata` for the user-provided pipelines.
+2. Use the returned metadata to generate the Lakeflow code.
+3. Return only a Python dictionary with 'lineage' and 'converted_code'.
 """
 
 agent = create_deep_agent(
     model=llm,
     system_prompt=SYSTEM_PROMPT,
-    tools=[discover_child_pipelines, get_pipeline_metadata, get_pipeline_details, get_dataset_details, get_linked_service_details, get_trigger_details]
+    tools=[get_pipeline_hierarchy_and_metadata, get_pipeline_metadata]
 )
 
 prompt = f"Convert these ADF pipelines to Databricks Lakeflow: {pipelines}"
